@@ -65,20 +65,18 @@ def to_raw(data_path, sub_id, save_path):
     """  
     Preprocess raw EDF data to filtered FIF format.  
     """  
-    sub_id=''
-    for folder in os.listdir(data_path):  
-        if folder.startswith(sub_id):  
-            sub_id = folder.split()[0]
+    for sub_folder in os.listdir(data_path):  
+        if sub_folder.startswith(sub_id):  
             save_fname_fif = sub_id + '_preprocessed-raw.fif'  
             print(sub_id, save_fname_fif)  
             break  
     
-    eeg_data_raw_file = os.path.join(data_path, sub_id, next(subfile for subfile in os.listdir(os.path.join(data_path,sub_id)) if (subfile.endswith(('.edf', '.EDF')))))  
+    eeg_data_raw_file = os.path.join(data_path, sub_folder, next(subfile for subfile in os.listdir(os.path.join(data_path,sub_folder)) if (subfile.endswith(('.edf', '.EDF')))))  
     
     # read data, set EOG channel, and drop unused channels
     print(f"{sub_id}\nreading raw file...")
-    raw = mne.io.read_raw_edf(eeg_data_raw_file)  
-
+    raw = load_raw_data(eeg_data_raw_file, 'eog')
+ 
     montage_fname = '../montages/Hydro_Neo_Net_64_xyz_cms_No_FID.sfp'
     Fp1_eog_flag=0
     # 32 channel case
