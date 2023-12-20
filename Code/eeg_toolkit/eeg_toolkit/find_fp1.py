@@ -3,8 +3,8 @@ import numpy as np
 import mne
 from mne.preprocessing import ICA
 from pyprep.find_noisy_channels import NoisyChannels
-from ._utils import *
-from ._preprocess import *
+from .utils import *
+from .preprocess import *
 
 def get_fp1_subs(data_path, sub_num):  
     """  

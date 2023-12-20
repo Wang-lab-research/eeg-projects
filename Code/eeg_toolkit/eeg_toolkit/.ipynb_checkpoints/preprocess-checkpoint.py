@@ -1,31 +1,8 @@
-import os
-import numpy as np
-import mne
-import shutil
+from .utils import *
 from mne.preprocessing import ICA
 from pyprep.find_noisy_channels import NoisyChannels
-from ._utils import *
 
 RESAMPLE_FREQ = 400  
-
-def load_raw_data(eeg_data_raw_file, eog):  
-    """  
-    Load raw EDF data with specified EOG channel.  
-    """  
-    return mne.io.read_raw_edf(eeg_data_raw_file, eog=[eog], preload=True)  
-
-def set_montage(mne_obj, montage):  
-    """  
-    Set custom montage for Raw or Epochs object.  
-    """
-    print("setting custom montage...")
-    print(montage)
-    if type(montage)==str:
-        relative_path = os.path.join(os.path.dirname(__file__),montage_path)
-        montage = mne.channels.read_custom_montage(relative_path)
-        mne_obj.set_montage(montage,on_missing='ignore')  
-    else:
-        mne_obj.set_montage(montage,on_missing='ignore')  
 
 def get_time_window(peri_stim_time_win=None):
     """
