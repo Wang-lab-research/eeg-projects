@@ -1,6 +1,5 @@
 ##################################################################
-from ._utils import * 
-from ._preprocess import *
+from .utils import *
 mne.set_log_level('WARNING')
 from mne.datasets import fetch_fsaverage
 from mne.datasets import sample
@@ -24,25 +23,6 @@ apply_inverse_raw_kwargs = dict(
     lambda2 = 1. / snr ** 2, # regularizer parameter (λ²)
     verbose=True)
 ##################################################################
-
-# epoch time min and max
-def get_time_window(peri_stim_time_win=None):
-    bmax=0.
-    if peri_stim_time_win==None:
-        t_win = float(input("Please enter the peri-stimulus time window."+
-        "\nEx: '0 (default)' = [-0.2,0.8], '2' = [-1.0,1.0], etc...\n\n>> "))
-    else: 
-        t_win = float(peri_stim_time_win)
-        
-    if t_win==0.:
-        tmin,tmax = -0.2,0.8
-        time_win_path=''
-    else:
-        tmin,tmax = -t_win/2,t_win/2
-    print(f"[{tmin},{bmax},{tmax}]")
-    time_win_path=f'{int(t_win)}_sec_time_window/'
-    # print(time_win_path)
-    return (tmin,bmax,tmax),time_win_path
 
 def make_sub_time_win_path(sub_id,save_path_cont,save_path_zepo,
                           include_zepochs=True):
@@ -82,17 +62,6 @@ def to_source(sub_id,data_path,epo_path,save_path_cont,
     print(sub_raw_fname)
     raw.set_eeg_reference('average',projection=True)
     
-    if len(raw.info['ch_names']) < 64:
-        custom_montage = '../montages/Hydro_Neo_Net_32_xyz_cms_No_Fp1.sfp'
-    else:
-        if "FP1" in raw.ch_names: # wrong 64ch montage, has 4 channels dropped (subjects C24, 055, 056, 047)
-            custom_montage = '../montages/Hydro_Neo_Net_64_xyz_cms_Caps.sfp'
-        else:
-            custom_montage = './montages/Hydro_Neo_Net_64_xyz_cms.sfp'
-
-    set_montage(raw,custom_montage)
-    # raw.plot_sensors(kind='3d',show_names=True); # optional to plot
-
     selected_labels = [mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0] for roi in roi_names]
 
     # Extract time window information from tuple arguments
@@ -113,7 +82,6 @@ def to_source(sub_id,data_path,epo_path,save_path_cont,
             epochs=mne.read_epochs(epochs_path)
             print(sub_epo_fname)
     
-            set_montage(epochs,custom_montage)
             epochs.set_eeg_reference('average',projection=True)
     
             data_epo = epochs.get_data()
@@ -133,7 +101,9 @@ def to_source(sub_id,data_path,epo_path,save_path_cont,
                                       event_id=epochs.event_id,
                                       events=epochs.events,
                                       )
-        
+            set_montage(zepochs,raw.get_montage())
+
+         
         ##################################### Compute noise & data covariance ############################################
         raw_crop = raw.copy().crop(tmin=60*rest_min,tmax=60*rest_max) 
         noise_cov = mne.compute_raw_covariance(raw_crop, verbose=True)

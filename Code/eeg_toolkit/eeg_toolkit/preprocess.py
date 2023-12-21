@@ -1,29 +1,8 @@
-import os
-import numpy as np
-import mne
-import shutil
+from .utils import *
 from mne.preprocessing import ICA
 from pyprep.find_noisy_channels import NoisyChannels
-from ._utils import *
 
 RESAMPLE_FREQ = 400  
-
-def load_raw_data(eeg_data_raw_file, eog):  
-    """  
-    Load raw EDF data with specified EOG channel.  
-    """  
-    return mne.io.read_raw_edf(eeg_data_raw_file, eog=[eog], preload=True)  
-
-def set_montage(mne_obj, montage_path):  
-    """  
-    Set custom montage for Raw or Epochs object.  
-    """  
-    relative_path = os.path.join(os.path.dirname(__file__),montage_path)
-    if os.path.splitext(montage_path)[1]=='.xml': # gTec
-        montage = mne.channels.read_dig_egi(relative_path)  
-    elif os.path.splitext(montage_path)[1]=='.sfp': # Compumedics
-        montage = mne.channels.read_montage_fname(relative_path)  
-    mne_obj.set_montage(montage)  
 
 def get_time_window(peri_stim_time_win=None):
     """
@@ -89,7 +68,8 @@ def to_raw(data_path, sub_id, save_path):
     
         raw.drop_channels(non_eeg_chs)
         montage_fname = '../montages/Hydro_Neo_Net_32_xyz_cms_No_Fp1.sfp'
-    
+        set_montage(raw, montage_fname)
+
     # 64 channel case
     else:
         wrong_64_mtg_flag=0
@@ -102,32 +82,41 @@ def to_raw(data_path, sub_id, save_path):
             non_eeg_chs = ['HEOG', 'EKG', 'EMG', 'Trigger'] if 'HEOG' in raw.ch_names else ['HEO', 'EKG', 'EMG', 'Trigger']  
             raw.drop_channels(non_eeg_chs)
             montage_fname = '../montages/Hydro_Neo_Net_64_xyz_cms_No_FID.sfp'
-    
+            set_montage(raw, montage_fname)
+
         if "EEG66" in raw.ch_names:
             non_eeg_chs = ['EEG66','EEG67','EEG68','EEG69']
             raw.drop_channels(non_eeg_chs)
 
         # For 64 channel gTec cap
         if 'AF8' in raw.ch_names:
-            montage_fname = '../montages/gHIamp_64ch.xml'
-            raw.pick(range(62))
-            
+            # Form the 10-20 montage
+            mont1020 = mne.channels.make_standard_montage('standard_1020')
+            # Choose what channels you want to keep 
+            # Make sure that these channels exist e.g. T1 does not exist in the standard 10-20 EEG system!
+            kept_channels = raw.info['ch_names'][:64]
+            ind = [i for (i, channel) in enumerate(mont1020.ch_names) if channel.lower() in map(str.lower, kept_channels)]
+            mont1020_new = mont1020.copy()
+            # Keep only the desired channels
+            mont1020_new.ch_names = [mont1020.ch_names[x] for x in ind]
+            kept_channel_info = [mont1020.dig[x+3] for x in ind]
+            # Keep the first three rows as they are the fiducial points information
+            mont1020_new.dig = mont1020.dig[0:3]+kept_channel_info
+            set_montage(raw, mont1020_new)
+
         # make adjustment for wrong montage subjects
         if wrong_64_mtg_flag:
             raw.drop_channels(['FT7','FT8','PO5','PO6']) # for subjects C24, 055, 056, 047
             montage_fname = '../montages/Hydro_Neo_Net_64_xyz_cms_No_FID_Caps.sfp' 
-    
+            set_montage(raw, montage_fname)
+ 
     # 007 and 010 had extremely noisy data near the ends of their recordings.
     # Crop it out.
     if sub_id=='007':
         raw = raw.crop(tmax=1483) 
     elif sub_id=='010':
         raw.crop(tmax=1997.8)
-    
-    print(f"{sub_id}\nsetting custom montage...")
-    print(montage_fname)
-    set_montage(raw, montage_fname)
-    
+      
     # high level inspection
     print(raw.ch_names)
     print(len(raw.ch_names))
