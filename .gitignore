@@ -1,5 +1,6 @@
 # Ignore all large data
 **/Data/
+**/Processed Data/
 
 # Ignore old code
 Chronic Low Back Pain Study/Misc/
