@@ -26,10 +26,10 @@ def set_montage(mne_obj, montage):
     else:
         mne_obj.set_montage(montage,on_missing='ignore')  
 
-def import_subs(data_path="../Data/Processed Data/"):
+def import_subs(data_path,fname):
     # import sub_ids
     sub_ids=[]
-    with open('sub_ids.txt', 'r') as file:
+    with open(os.path.join(data_path,fname), 'r') as file:
         for line in file:
             # Check if the line is not commented out
             if not line.strip().startswith('#'):
