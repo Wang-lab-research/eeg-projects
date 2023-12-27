@@ -1,0 +1,16 @@
+{
+  "dateFormat": "yyyy-MM-dd'T'HH:mm",
+  "enableCreateTime": true,
+  "headerUpdated": "updated",
+  "headerCreated": "created",
+  "minMinutesBetweenSaves": 1,
+  "ignoreGlobalFolder": [],
+  "ignoreCreatedFolder": [],
+  "enableExperimentalHash": false,
+  "fileHashMap": {
+    "Meta/Templates/Daily Note Template.md": "5e1d365a6501114b7c639f360d545da830b02181f863315051bf6fcb9da349eb",
+    "Daily Notes/2023-12-26.md": "22a38c312d84801fa5f4bcff0e85e3b3785aae1effd897c2646962564c23b4ef",
+    "Daily Notes/2023-12-27.md": "4aef93d068d64b7190edecf5a5160e250469c30b100ea0c3b1946761c12d57f5",
+    "Clippings/How To Be Successful.md": "4a8867789ed8c2a39a56ce524be56d17fa9b05a26cc8a645fbb8ac857c314753"
+  }
+}

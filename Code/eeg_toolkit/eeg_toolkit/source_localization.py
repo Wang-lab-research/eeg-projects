@@ -2,9 +2,6 @@
 from .utils import *
 mne.set_log_level('WARNING')
 from mne.datasets import fetch_fsaverage
-from mne.datasets import sample
-from mne.minimum_norm import make_inverse_operator, apply_inverse
-from mne.beamformer import make_lcmv, apply_lcmv_raw
 import scipy.io as scio
 get_ipython().run_line_magic('matplotlib', 'inline')
 
@@ -103,7 +100,10 @@ def to_source(sub_id,data_path,epo_path,save_path_cont,
                                       )
             set_montage(zepochs,raw.get_montage())
 
-         
+        ##################################### Crop resting EC and EO ############################################
+        # TODO: perform crop for resting state 
+        # TODO: use different noise covariance for resting state
+        
         ##################################### Compute noise & data covariance ############################################
         raw_crop = raw.copy().crop(tmin=60*rest_min,tmax=60*rest_max) 
         noise_cov = mne.compute_raw_covariance(raw_crop, verbose=True)
