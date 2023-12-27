@@ -19,3 +19,6 @@ Postoperative Pain iEEG Study/
 
 # Ignore gh token
 gh*
+
+# Ignore irrelevant folders
+My*
