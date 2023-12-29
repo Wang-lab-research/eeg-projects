@@ -1,18 +1,37 @@
-from .utils import *
+from utils import *
 import mne_connectivity
 import matplotlib.pyplot as plt
 import scipy.io as sio
 import os
 
 
+# Define function for plotting con matrices
+def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, foi):
+    """Visualize the connectivity matrix."""
+    fig, ax = plt.subplots(1, n_con_methods, figsize=(6 * n_con_methods, 6))
+    for c in range(n_con_methods):
+        # Plot with imshow
+        con_plot = ax[c].imshow(con_data[c, :, :, foi], cmap="binary", vmin=0, vmax=1)
+        # Set title
+        ax[c].set_title(connectivity_methods[c])
+        # Add colorbar
+        fig.colorbar(con_plot, ax=ax[c], shrink=0.7, label="Connectivity")
+        # Fix labels
+        ax[c].set_xticks(range(len(roi_names)))
+        ax[c].set_xticklabels(roi_names)
+        ax[c].set_yticks(range(len(roi_names)))
+        ax[c].set_yticklabels(roi_names)
+        print(
+            f"Connectivity method: {connectivity_methods[c]}\n"
+            + f"{con_data[c,:,:,foi]}"
+        )
+    return fig
+
+
 def compute_connectivity_epochs(data_path, roi_names, con_methods, Freq_Bands, sfreq):
     # Load the data
-    data = []
-    for roi in roi_names:
-        data_file = os.path.join(data_path, roi + "_stc_zepo.mat")
-        tmp_data = sio.loadmat(data_file)["data"]
-
-        data.append(tmp_data)  # Assumes .mat files are named after the ROI
+    fname = os.path.join(data_path + ".stc")
+    tmp_data = stc = mne.read_source_estimate(fname)
 
     # Create epochs from the data
     epochs_data = np.transpose(np.array(data), (1, 0, 2))
