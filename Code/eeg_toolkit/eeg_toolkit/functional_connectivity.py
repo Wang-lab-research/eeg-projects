@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import scipy.io as sio
 import os
 
-
 # Define function for plotting con matrices
 def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, foi):
     """Visualize the connectivity matrix."""
@@ -28,49 +27,35 @@ def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, fo
     return fig
 
 
-def compute_connectivity_epochs(data_path, roi_names, con_methods, Freq_Bands, sfreq):
-    # Load the data
-    fname = os.path.join(data_path + ".stc")
-    tmp_data = stc = mne.read_source_estimate(fname)
+def plot_connectivity(con_epochs, t_con_max, roi_names, con_methods):
+    for c in range(len(con_epochs)):
+        # Plot the connectivity matrix at the timepoint with highest global wPLI
+        con_epochs_matrix = con_epochs[c].get_data(output="dense")[:, :, 0, t_con_max]
 
-    # Create epochs from the data
-    epochs_data = np.transpose(np.array(data), (1, 0, 2))
-    _, n_channels, n_times = epochs_data.shape
+        fig, ax = plt.subplots()
 
-    info = mne.create_info(
-        roi_names, sfreq
-    )  # Assumes same sampling frequency for all data
-    epochs = mne.EpochsArray(epochs_data, info)
+        im = ax.imshow(con_epochs_matrix)
+        fig.colorbar(im, ax=ax, label="Connectivity")
 
-    n_con_methods = len(con_methods)
-    n_freq_bands = len(Freq_Bands)
+        ax.set_ylabel("Regions")
+        ax.set_yticks(range(len(roi_names)))
+        ax.set_yticklabels(roi_names)
 
-    # Pre-allocatate memory for the connectivity matrices
-    con_epochs_array = np.zeros(
-        (n_con_methods, n_channels, n_channels, n_freq_bands, n_times)
-    )
-    con_epochs_array[con_epochs_array == 0] = np.nan  # nan matrix
+        ax.set_xlabel("Regions")
+        ax.set_xticks(range(len(roi_names)))
+        ax.set_xticklabels(roi_names, rotation=45)
 
-    # Compute connectivity
-    for band, freq in Freq_Bands.items():
-        for method in con_methods:
-            con = mne_connectivity.spectral_connectivity_epochs(
-                epochs,
-                method=method,
-                mode="multitaper",
-                sfreq=sfreq,
-                fmin=freq[0],
-                fmax=freq[1],
-                faverage=True,
-                mt_adaptive=False,
-                n_jobs=-1,
-            )
+        ax.set_title(f"{con_methods[c]} Connectivity")
 
-    for c in range(n_con_methods):
-        con_epochs_array[c] = con_epochs[c].get_data(output="dense")
+        plt.show()
 
-    # Plotting
-    for (band, method), con in con_matrices.items():
+
+def plot_connectivity_circle(con_epochs_array, con_methods, Freq_Bands, roi_names):
+    import matplotlib.pyplot as plt
+    import mne
+
+    for band, method in product(Freq_Bands, con_methods):
+        con = con_epochs_array[con_methods.index(method)][..., band]
         plt.figure(figsize=(10, 8))
         mne.viz.plot_connectivity_circle(
             con,
@@ -82,6 +67,89 @@ def compute_connectivity_epochs(data_path, roi_names, con_methods, Freq_Bands, s
             fontsize_names=8,
         )
         plt.show()
+
+
+def plot_global_connectivity(epochs, tmin, tmax, n_connections, con_epochs, Freq_Bands):
+    """
+    Plot the global connectivity over time.
+
+    Args:
+        epochs (Epochs): The epochs data.
+        tmin (float): The minimum time value to include in the plot.
+        tmax (float): The maximum time value to include in the plot.
+        n_connections (int): The number of connections.
+        con_epochs (list): The connectivity epochs.
+        Freq_Bands (dict): The frequency bands.
+    """
+
+    # Get the timepoints within the specified time range
+    times = epochs.times[(epochs.times >= tmin) & (epochs.times <= tmax)]
+
+    for c in range(len(con_epochs)):
+        # Get global average connectivity over all connections
+        con_epochs_raveled_array = con_epochs[c].get_data(output="raveled")
+        global_con_epochs = np.sum(con_epochs_raveled_array, axis=0) / n_connections
+
+        for i, (k, v) in enumerate(Freq_Bands.items()):
+            global_con_epochs_tmp = global_con_epochs[i]
+
+            # Get the timepoint with the highest global connectivity right after stimulus
+            t_con_max = np.argmax(global_con_epochs_tmp[times <= tmax])
+
+            # Plot the global connectivity
+            fig = plt.figure()
+            plt.plot(times, global_con_epochs_tmp)
+            plt.xlabel("Time (s)")
+            plt.ylabel(f"Global {k} wPLI over trials")
+            plt.title(f"Global {k} wPLI peaks {times[t_con_max]:.3f}s after stimulus")
+
+
+def compute_connectivity_epochs(data_path, roi_names, con_methods, Freq_Bands, sfreq):
+    # Load the data
+    fname = os.path.join(data_path + ".stc")
+    stc = mne.read_source_estimate(fname)
+
+    # Create epochs from the data
+    epochs_data = np.transpose(np.array(data), (1, 0, 2))
+    _, n_channels, n_times = epochs_data.shape
+
+    info = mne.create_info(roi_names, sfreq)
+    epochs = mne.EpochsArray(epochs_data, info)
+
+    n_freq_bands = len(Freq_Bands)
+    min_freq = np.min(list(Freq_Bands.values()))
+    max_freq = np.max(list(Freq_Bands.values()))
+
+    # Prepare the freq points
+    freqs = np.linspace(min_freq, max_freq, int((max_freq - min_freq) * 4 + 1))
+
+    fmin = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
+    fmax = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
+
+    # We specify the connectivity measurements
+    connectivity_methods = [
+        "wpli",
+        "dpli",
+        "plv",
+    ]
+    n_con_methods = len(connectivity_methods)
+
+    # Compute connectivity over trials
+    con_epochs = spectral_connectivity_epochs(
+        epochs,
+        method=connectivity_methods,
+        sfreq=sfreq,
+        mode="cwt_morlet",
+        cwt_freqs=freqs,
+        fmin=fmin,
+        fmax=fmax,
+        faverage=True,
+        tmin=tmin,
+        tmax=tmax,
+        cwt_n_cycles=4,
+    )
+
+    return con_epochs
 
 
 def compute_connectivity_resting_state(
