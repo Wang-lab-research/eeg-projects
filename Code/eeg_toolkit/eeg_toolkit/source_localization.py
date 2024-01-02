@@ -1,8 +1,7 @@
 ##################################################################
-from utils import *
+from .utils import *
 from mne.datasets import fetch_fsaverage
 
-get_ipython().run_line_magic("matplotlib", "inline")
 mne.set_log_level("WARNING")
 
 # Source the fsaverage files
@@ -16,71 +15,87 @@ model_fname = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem.fif")
 
 # apply inverse
 snr = 3.0
-apply_inverse_raw_kwargs = dict(
+apply_inverse_rawEC_kwargs = dict(
     lambda2=1.0 / snr**2, verbose=True  # regularizer parameter (λ²)
 )
 ##################################################################
 
 
-def make_sub_time_win_path(
-    sub_id, save_path_cont, save_path_zepo, include_zepochs=True
-):
+def load_raw(data_path, sub_id, condition):
     """
-    Make a subject's time window data path.
+    Load a raw data file and preprocess it.
 
-    Args:
+    Parameters:
+        data_path (str): The path to the directory containing the data files.
         sub_id (str): The subject ID.
-        save_path_cont (str): The path to save continuous data.
-        save_path_zepo (str): The path to save zepochs data.
-        include_zepochs (bool, optional): Whether to include zepochs data. Defaults to True.
+        condition (str): The condition of the data.
 
     Returns:
-        tuple: A tuple containing the paths for continuous data and zepochs data (if included).
+        raw (mne.io.Raw): The preprocessed raw data.
+
+    Raises:
+        FileNotFoundError: If the raw data file does not exist.
+
+    Notes:
+        - This function assumes that the raw data file follows the naming convention: "{sub_id}_{condition}-raw.fif".
+        - The raw data file is loaded using the MNE library.
+        - The loaded raw data is preprocessed by setting an EEG reference to "average" with projection.
     """
-    subpath_cont = os.path.join(save_path_cont, sub_id)
-    if not os.path.exists(subpath_cont):  # continuous
-        os.mkdir(subpath_cont)
+    sub_fname = f"{sub_id}_{condition}-raw.fif"
+    raw_path = os.path.join(data_path, sub_fname)
+    raw = mne.io.read_raw_fif(raw_path, preload=True)
+    print(sub_raw_fname)
+    raw.set_eeg_reference("average", projection=True)
+    return raw
 
-    subpath_zepo = None
-    if include_zepochs:
-        subpath_zepo = os.path.join(save_path_zepo, sub_id)
-        if not os.path.exists(subpath_zepo):  # zepochs
-            os.mkdir(subpath_zepo)
 
-    return subpath_cont, subpath_zepo
+def make_sub_time_win_path(sub_id, save_path):
+    """
+    Make a subject's time window data path.
+    """
+    sub_path = os.path.join(save_path, sub_id)
+    [os.mkdir(path) for path in [sub_path] if not os.path.exists(path)]
+
+    return sub_path
 
 
 def to_source(
     sub_id,
     data_path,
-    epo_path,
-    save_path_cont,
-    save_path_zepo,
+    Z_scored_epochs_save_path,
+    EC_resting_save_path,
+    EO_resting_save_path,
     roi_names,
     times_tup,
-    noise_cov_win,
-    include_zepochs=True,
+    return_zepochs=True,
+    return_EC_resting=True,
+    return_EO_resting=True,
     average_dipoles=True,
 ):
     """
-    Perform source localization on Raw object
-    using fsaverage for certain selected labels.
-    sub_id: subject ID
-    data_path: contains raw and info
-    epo_path: specifies epo objects specified with time_win
-    roi_names: the roi to extract from STC as a list
-    times_tup: contains tmin,tmax,bmax
-    noise_cov_win: (rest_min,rest_max). Crop raw during eyes-open resting condition
-    include_zepochs: whether to also export z-scored epochs, default True.
-    average_dipoles: whether to average source points in each ROI, default True.
+    Compute the source localization for a subject for eyes closed, eyes open, and z-scored epochs.
+    Args:
+        sub_id (str): The ID of the subject.
+        data_path (str): The path to the data.
+        Z_scored_epochs_save_path (str): The path to save the Z-scored epochs.
+        EC_resting_save_path (str): The path to save the EC resting state data.
+        EO_resting_save_path (str): The path to save the EO resting state data.
+        roi_names (list): The names of the ROIs.
+        times_tup (tuple): A tuple containing the time window information.
+        return_zepochs (bool, optional): Whether to return the Z-scored epochs. Defaults to True.
+        return_EC_resting (bool, optional): Whether to return the EC resting state data. Defaults to True.
+        return_EO_resting (bool, optional): Whether to return the EO resting state data. Defaults to True.
+        average_dipoles (bool, optional): Whether to average the dipoles. Defaults to True.
+
+    Returns:
+        None
     """
-    #################################### Read Raw and Epochs & Set montage ###########################################
-    zepochs_stc_arr = None
-    sub_raw_fname = f"{sub_id}_preprocessed-raw.fif"
-    raw_path = os.path.join(data_path, sub_raw_fname)
-    raw = mne.io.read_raw_fif(raw_path, preload=True)
-    print(sub_raw_fname)
-    raw.set_eeg_reference("average", projection=True)
+
+    # Load the resting state data
+    rawEO = load_raw(data_path, "EO", sub_id)
+    rawEC = load_raw(data_path, "EC", sub_id)
+    # TODO: uncomment when noise segment is generated
+    noise_segment = load_raw(data_path, "noise", sub_id)
 
     labels = [
         mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
@@ -89,29 +104,28 @@ def to_source(
 
     # Extract time window information from tuple arguments
     tmin, tmax, bmax = times_tup
-    rest_min, rest_max = noise_cov_win
+    # TODO: remove hardcoded noise window once generated for each subject
+    rest_min, rest_max = 5.5, 7.5
 
     # Make subpaths
-    subpath_cont, subpath_zepo = make_sub_time_win_path(
-        sub_id,
-        save_path_cont,
-        save_path_zepo,
-        include_zepochs=True,
-    )
-
-    # Quick check to see if subject already processed
-    subpath_cont_count = len(os.listdir(subpath_cont))
-    subpath_zepo_count = len(os.listdir(subpath_zepo))
+    if return_EC_resting:
+        EC_subpath = make_sub_time_win_path(sub_id, EC_resting_save_path)
+        EC_subpath_count = len(os.listdir(EC_subpath))
+    if return_EO_resting:
+        EO_subpath = make_sub_time_win_path(sub_id, EO_resting_save_path)
+        EO_subpath_count = len(os.listdir(EO_subpath))
+    if return_zepochs:
+        Zepo_subpath = make_sub_time_win_path(sub_id, Z_scored_epochs_save_path)
+        Zepo_subpath_count = len(os.listdir(Zepo_subpath))
     roi_names_count = len(roi_names)
 
-    if (
-        subpath_cont_count < roi_names_count or subpath_zepo_count < roi_names_count
-    ):  ##################################### Z-score Epochs then convert to STC ############################################
-        if include_zepochs:
+    # Quick check to see if subject already processed
+    if return EO_subpath_count < roi_names_count:
+        # Z-score Epochs then convert to STC
+        if return_zepochs and Zepo_subpath_count < roi_names_count:
             sub_epo_fname = f"{sub_id}_preprocessed-epo.fif"
-            epochs_path = os.path.join(epo_path, sub_epo_fname)
-            epochs = mne.read_epochs(epochs_path)
             print(sub_epo_fname)
+            epochs = mne.read_epochs(os.path.join(epo_path, sub_epo_fname))
 
             epochs.set_eeg_reference("average", projection=True)
 
@@ -135,22 +149,24 @@ def to_source(
                 event_id=epochs.event_id,
                 events=epochs.events,
             )
-            set_montage(zepochs, raw.get_montage())
+            set_montage(zepochs, rawEC.get_montage())
 
-        ##################################### Crop resting EC and EO ############################################
+        # Crop resting EC and EO
         # TODO: perform crop for resting state
         # TODO: use different noise covariance for resting state
 
-        ##################################### Compute noise & data covariance ############################################
-        raw_crop = raw.copy().crop(tmin=60 * rest_min, tmax=60 * rest_max)
-        noise_cov = mne.compute_raw_covariance(raw_crop, verbose=True)
+        # Compute noise & data covariance
+        rawEC_crop = rawEC.copy().crop(tmin=60 * rest_min, tmax=60 * rest_max)
+        noise_cov = mne.compute_rawEC_covariance(rawEC_crop, verbose=True)
 
         ################################### Regularize the covariance matrices ##########################################
-        noise_cov = mne.cov.regularize(noise_cov, raw_crop.info, eeg=0.1, verbose=True)
+        noise_cov = mne.cov.regularize(
+            noise_cov, rawEC_crop.info, eeg=0.1, verbose=True
+        )
 
         #################################### Compute the forward solution ###############################################
         fwd = mne.make_forward_solution(
-            raw.info,
+            rawEC.info,
             trans=trans,
             src=src,
             bem=bem,
@@ -163,21 +179,21 @@ def to_source(
 
         ###################################### Make the inverse operator ###############################################
         inverse_operator = mne.minimum_norm.make_inverse_operator(
-            raw.info, fwd, noise_cov, verbose=True
+            rawEC.info, fwd, noise_cov, verbose=True
         )
 
-        if include_zepochs:
+        if return_zepochs:
             inverse_operator_zepo = mne.minimum_norm.make_inverse_operator(
                 zepochs.info, fwd, noise_cov, verbose=True
             )
         clear_display()
 
         ################################# Save source time courses #######################################
-        if len(os.listdir(subpath_cont)) < len(roi_names):
-            print(sub_raw_fname)
+        if len(os.listdir(EO_subpath)) < len(roi_names):
+            print(sub_rawEC_fname)
             src_cont = inverse_operator["src"]
-            stc_cont = mne.minimum_norm.apply_inverse_raw(
-                raw, inverse_operator, method="dSPM", **apply_inverse_raw_kwargs
+            stc_cont = mne.minimum_norm.apply_inverse_rawEC(
+                rawEC, inverse_operator, method="dSPM", **apply_inverse_rawEC_kwargs
             )
             # Save the continuous STC file
             print(f"Saving {sub_id} continuous stc")
@@ -194,14 +210,14 @@ def to_source(
             clear_display()
 
         ################################# Apply inverse to epochs #######################################
-        if include_zepochs:
-            if len(os.listdir(subpath_zepo)) < len(roi_names):
+        if return_zepochs:
+            if len(os.listdir(Zepo_subpath)) < len(roi_names):
                 print(sub_epo_fname)
                 zepochs_stc = mne.minimum_norm.apply_inverse_epochs(
                     zepochs,
                     inverse_operator_zepo,
                     method="dSPM",
-                    **apply_inverse_raw_kwargs,
+                    **apply_inverse_rawEC_kwargs,
                 )
 
                 src_zepo = inverse_operator_zepo["src"]

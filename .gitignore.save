@@ -1,0 +1,32 @@
+# Ignore all large data
+**/Data/
+**/Processed Data/
+!Chronic Low Back Pain Study/Code/Functional connectivity analysis/Processed Data/
+
+# Ignore old code
+Chronic Low Back Pain Study/Misc/
+Chronic Low Back Pain Study/Notes/
+
+# Ignore miscellaneous code
+Code/Misc/
+
+# Ignore repos for other projects
+Code/eeg-erds-stats/
+Code/eeg-unsup-pain-decoding/
+Code/purdonlabmeeg
+
+# Ignore folder of unrelated iEEG studzPostoperative Pain iEEG Study/
+
+# Ignore gh token
+gh*
+
+# Ignore irrelevant folders
+<<<<<<< HEAD
+<<<<<<< HEAD
+My*/
+=======
+My*
+>>>>>>> update gitignore
+=======
+My Second Brain/
+>>>>>>> update gitignore

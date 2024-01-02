@@ -1,8 +1,9 @@
-from utils import *
+from .utils import *
 import mne_connectivity
 import matplotlib.pyplot as plt
 import scipy.io as sio
 import os
+
 
 # Define function for plotting con matrices
 def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, foi):
