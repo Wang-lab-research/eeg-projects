@@ -117,6 +117,7 @@ def save_label_time_course(
         condition,
         average_dipoles=False,
     ):
+        nan_subjects = []
         stc = mne.minimum_norm.apply_inverse_raw(
             mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
         )
@@ -125,12 +126,13 @@ def save_label_time_course(
         mode = "mean_flip" if average_dipoles else None
         label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
         if np.isnan(label_ts).any():
-            raise ValueError("label_ts contains nan")
+            nan_subjects.append(sub_id)
+            # raise ValueError("label_ts contains nan")
         stc_mean_flip = mne.labels_to_stc(labels, label_ts, src=src)
         stc_mean_flip.save(
             os.path.join(save_path, f"{sub_id}_{condition}.stc"), overwrite=True
         )
-        return label_ts
+        return label_ts, nan_subjects
 
     def apply_inverse_Epochs(
         mne_object,
@@ -140,6 +142,7 @@ def save_label_time_course(
         condition,
         average_dipoles=False,
     ):
+        nan_subjects = []
         stc = mne.minimum_norm.apply_inverse_epochs(
             mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
         )
@@ -148,7 +151,9 @@ def save_label_time_course(
         mode = "mean_flip" if average_dipoles else None
         label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
         if np.isnan(label_ts).any():
-            raise ValueError("label_ts contains nan")
+            nan_subjects.append(sub_id)
+            # raise ValueError("label_ts contains nan")
+
         for epoch_idx, epoch_ts in enumerate(label_ts):
             print(f"Saving STC for epoch {epoch_idx}")
             stc_mean_flip = mne.labels_to_stc(labels, epoch_ts, src=src)
@@ -156,21 +161,21 @@ def save_label_time_course(
                 os.path.join(save_path, f"{sub_id}_{condition}_{epoch_idx}.stc"),
                 overwrite=True,
             )
-        return label_ts
+        return label_ts, nan_subjects
 
     if isinstance(mne_object, mne.io.fiff.raw.Raw):
         print("Applying inverse to Raw object")
-        label_ts = apply_inverse_Raw(
+        label_ts, nan_subjects = apply_inverse_Raw(
             mne_object, inverse_operator, save_path, sub_id, condition, average_dipoles
         )
     elif isinstance(mne_object, mne.epochs.EpochsArray):
         print("Applying inverse to Epochs object")
-        label_ts = apply_inverse_Epochs(
+        label_ts, nan_subjects = apply_inverse_Epochs(
             mne_object, inverse_operator, save_path, sub_id, condition, average_dipoles
         )
     else:
         raise ValueError("Invalid mne_object type")
-    return label_ts
+    return label_ts, nan_subjects
     clear_display()
 
 
@@ -250,8 +255,9 @@ def to_source(
 
     # If desired and eyes open resting data not yet processed, process it
     label_ts_EO, label_ts_EC, label_ts_Epochs = None, None, None
+    nan_subjects = []
     if return_EO_resting and EO_subpath_count < roi_names_count:
-        label_ts_EO = save_label_time_course(
+        label_ts_EO, nan_subjects = save_label_time_course(
             sub_id,
             "EO",
             snr,
@@ -267,7 +273,7 @@ def to_source(
 
     # If desired and eyes closed resting data not yet processed, process it
     if return_EC_resting and EC_subpath_count < roi_names_count:
-        label_ts_EC = save_label_time_course(
+        label_ts_EC, nan_subjects = save_label_time_course(
             sub_id,
             "EC",
             snr,
@@ -287,7 +293,7 @@ def to_source(
     if return_zepochs and Zepo_subpath_count < roi_names_count:
         zepochs = zscore_epochs(sub_id, data_path, tmin, raw_eo)
 
-        label_ts_Epochs = save_label_time_course(
+        label_ts_Epochs, nan_subjects = save_label_time_course(
             sub_id,
             "epochs",
             snr,
@@ -301,4 +307,4 @@ def to_source(
             average_dipoles=True,
         )
 
-    return label_ts_EO, label_ts_EC, label_ts_Epochs
+    return (label_ts_EO, label_ts_EC, label_ts_Epochs), nan_subjects
