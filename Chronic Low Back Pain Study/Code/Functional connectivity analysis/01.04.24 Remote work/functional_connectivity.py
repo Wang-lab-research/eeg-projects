@@ -1,10 +1,8 @@
-# from .utils import *
+from .utils import *
 import mne_connectivity
 import matplotlib.pyplot as plt
 import scipy.io as sio
 import os
-import numpy as np
-import mne
 
 
 # Define function for plotting con matrices
@@ -29,13 +27,14 @@ def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, fo
         )
     return fig
 
-
+# ADJUSTED BY GPT-4
 def plot_connectivity(con_epochs, t_con_max, roi_names, con_methods):
     for c in range(len(con_epochs)):
         # Plot the connectivity matrix at the timepoint with highest global wPLI
         con_epochs_matrix = con_epochs[c].get_data(output="dense")[:, :, 0, t_con_max]
 
-        fig, ax = plt.subplots()
+        # Increase figure size for better label spacing
+        fig, ax = plt.subplots(figsize=(10, 8))
 
         im = ax.imshow(con_epochs_matrix)
         fig.colorbar(im, ax=ax, label="Connectivity")
@@ -46,10 +45,13 @@ def plot_connectivity(con_epochs, t_con_max, roi_names, con_methods):
 
         ax.set_xlabel("Regions")
         ax.set_xticks(range(len(roi_names)))
-        ax.set_xticklabels(roi_names, rotation=45)
+        # Adjust rotation and alignment of x labels
+        ax.set_xticklabels(roi_names, rotation=60, ha='right')
 
         ax.set_title(f"{con_methods[c]} Connectivity")
 
+        # Use tight layout to optimize spacing
+        plt.tight_layout()
         plt.show()
 
 

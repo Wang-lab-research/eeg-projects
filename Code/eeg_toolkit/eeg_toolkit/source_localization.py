@@ -1,8 +1,13 @@
 ##################################################################
-from .utils import *
+from .utils import clear_display, set_montage
+import mne
+import os
+import numpy as np
 from mne.datasets import fetch_fsaverage
 
 mne.set_log_level("WARNING")
+
+#################################################################################################
 
 # Source the fsaverage files
 fs_dir = fetch_fsaverage(verbose=True)
@@ -12,39 +17,21 @@ subjects_dir = os.path.dirname(fs_dir)
 src = os.path.join(fs_dir, "bem", "fsaverage-ico-5-src.fif")  # surface for dSPM
 bem = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
 model_fname = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem.fif")
+snr = 3.0  # for inverse
+#################################################################################################
 
-# apply inverse
-snr = 3.0
-apply_inverse_rawEC_kwargs = dict(
-    lambda2=1.0 / snr**2, verbose=True  # regularizer parameter (λ²)
-)
-##################################################################
+
+class InstanceNotDefinedError(Exception):
+    pass
 
 
 def load_raw(data_path, sub_id, condition):
     """
     Load a raw data file and preprocess it.
-
-    Parameters:
-        data_path (str): The path to the directory containing the data files.
-        sub_id (str): The subject ID.
-        condition (str): The condition of the data.
-
-    Returns:
-        raw (mne.io.Raw): The preprocessed raw data.
-
-    Raises:
-        FileNotFoundError: If the raw data file does not exist.
-
-    Notes:
-        - This function assumes that the raw data file follows the naming convention: "{sub_id}_{condition}-raw.fif".
-        - The raw data file is loaded using the MNE library.
-        - The loaded raw data is preprocessed by setting an EEG reference to "average" with projection.
     """
     sub_fname = f"{sub_id}_{condition}-raw.fif"
     raw_path = os.path.join(data_path, sub_fname)
     raw = mne.io.read_raw_fif(raw_path, preload=True)
-    print(sub_raw_fname)
     raw.set_eeg_reference("average", projection=True)
     return raw
 
@@ -54,15 +41,143 @@ def make_sub_time_win_path(sub_id, save_path):
     Make a subject's time window data path.
     """
     sub_path = os.path.join(save_path, sub_id)
-    [os.mkdir(path) for path in [sub_path] if not os.path.exists(path)]
-
+    os.makedirs(sub_path, exist_ok=True)
     return sub_path
+
+
+def zscore_epochs(sub_id, data_path, tmin, raw_eo):
+    epochs_fname = f"{sub_id}_preprocessed-epo.fif"
+    epochs = mne.read_epochs(os.path.join(data_path, epochs_fname))
+    epochs.set_eeg_reference("average", projection=True)
+
+    data_epochs = epochs.get_data()
+    data_zepo = np.zeros_like(data_epochs)
+    base_data = epochs.get_data(tmin=tmin, tmax=0.0)
+
+    for epoch_idx in range(data_epochs.shape[0]):
+        for channel_idx in range(data_epochs.shape[1]):
+            base_mean = np.mean(base_data[epoch_idx, channel_idx, :])
+            base_std = np.std(base_data[epoch_idx, channel_idx, :])
+            data_zepo[epoch_idx, channel_idx, :] = (
+                data_epochs[epoch_idx, channel_idx, :] - base_mean
+            ) / base_std
+
+    zepochs = mne.EpochsArray(
+        data_zepo,
+        info=epochs.info,
+        tmin=tmin,
+        on_missing="ignore",
+        event_id=epochs.event_id,
+        events=epochs.events,
+    )
+    set_montage(zepochs, raw_eo.get_montage())
+
+    return zepochs
+
+
+def save_label_time_course(
+    sub_id,
+    condition,
+    snr,
+    trans,
+    src,
+    bem,
+    mne_object,
+    noise_cov,
+    labels,
+    save_path,
+    average_dipoles=True,
+):
+    apply_inverse_kwargs = dict(
+        lambda2=1.0 / snr**2,
+        verbose=True,
+    )
+
+    fwd = mne.make_forward_solution(
+        mne_object.info,
+        trans=trans,
+        src=src,
+        bem=bem,
+        meg=False,
+        eeg=True,
+        n_jobs=-1,
+        verbose=True,
+    )
+    clear_display()
+
+    inverse_operator = mne.minimum_norm.make_inverse_operator(
+        mne_object.info, fwd, noise_cov, verbose=True
+    )
+
+    def apply_inverse_Raw(
+        mne_object,
+        inverse_operator,
+        save_path,
+        sub_id,
+        condition,
+        average_dipoles=False,
+    ):
+        stc = mne.minimum_norm.apply_inverse_raw(
+            mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
+        )
+        src = inverse_operator["src"]
+        print(f"Saving {sub_id} {condition}")
+        mode = "mean_flip" if average_dipoles else None
+        label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
+        if np.isnan(label_ts).any():
+            raise ValueError("label_ts contains nan")
+        stc_mean_flip = mne.labels_to_stc(labels, label_ts, src=src)
+        stc_mean_flip.save(
+            os.path.join(save_path, f"{sub_id}_{condition}.stc"), overwrite=True
+        )
+        return label_ts
+
+    def apply_inverse_Epochs(
+        mne_object,
+        inverse_operator,
+        save_path,
+        sub_id,
+        condition,
+        average_dipoles=False,
+    ):
+        stc = mne.minimum_norm.apply_inverse_epochs(
+            mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
+        )
+        src = inverse_operator["src"]
+        print(f"Saving {sub_id} {condition}")
+        mode = "mean_flip" if average_dipoles else None
+        label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
+        if np.isnan(label_ts).any():
+            raise ValueError("label_ts contains nan")
+        for epoch_idx, epoch_ts in enumerate(label_ts):
+            print(f"Saving STC for epoch {epoch_idx}")
+            stc_mean_flip = mne.labels_to_stc(labels, epoch_ts, src=src)
+            stc_mean_flip.save(
+                os.path.join(save_path, f"{sub_id}_{condition}_{epoch_idx}.stc"),
+                overwrite=True,
+            )
+        return label_ts
+
+    if isinstance(mne_object, mne.io.fiff.raw.Raw):
+        print("Applying inverse to Raw object")
+        label_ts = apply_inverse_Raw(
+            mne_object, inverse_operator, save_path, sub_id, condition, average_dipoles
+        )
+    elif isinstance(mne_object, mne.epochs.EpochsArray):
+        print("Applying inverse to Epochs object")
+        label_ts = apply_inverse_Epochs(
+            mne_object, inverse_operator, save_path, sub_id, condition, average_dipoles
+        )
+    else:
+        raise ValueError("Invalid mne_object type")
+    return label_ts
+    clear_display()
 
 
 def to_source(
     sub_id,
     data_path,
-    Z_scored_epochs_save_path,
+    zscored_epochs_save_path,
     EC_resting_save_path,
     EO_resting_save_path,
     roi_names,
@@ -77,7 +192,7 @@ def to_source(
     Args:
         sub_id (str): The ID of the subject.
         data_path (str): The path to the data.
-        Z_scored_epochs_save_path (str): The path to save the Z-scored epochs.
+        zscored_epochs_save_path (str): The path to save the Z-scored epochs.
         EC_resting_save_path (str): The path to save the EC resting state data.
         EO_resting_save_path (str): The path to save the EO resting state data.
         roi_names (list): The names of the ROIs.
@@ -91,152 +206,99 @@ def to_source(
         None
     """
 
-    # Load the resting state data
-    rawEO = load_raw(data_path, "EO", sub_id)
-    rawEC = load_raw(data_path, "EC", sub_id)
-    # TODO: uncomment when noise segment is generated
-    noise_segment = load_raw(data_path, "noise", sub_id)
+    #################################################################################################
 
+    # Convert ROI names to labels
     labels = [
         mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
         for roi in roi_names
     ]
+    roi_names_count = len(roi_names)
 
     # Extract time window information from tuple arguments
     tmin, tmax, bmax = times_tup
     # TODO: remove hardcoded noise window once generated for each subject
     rest_min, rest_max = 5.5, 7.5
 
-    # Make subpaths
-    if return_EC_resting:
-        EC_subpath = make_sub_time_win_path(sub_id, EC_resting_save_path)
-        EC_subpath_count = len(os.listdir(EC_subpath))
+    # Compute noise & data covariance
+    # TODO: replace below with actual noise segment
+    # noise_segment = load_raw(data_path, "noise", sub_id)
+    # raw_eo = load_raw(data_path, sub_id, "EO")
+    raw_eo = load_raw(data_path, sub_id, "preprocessed")
+    noise_segment = raw_eo.crop(tmin=rest_min * 60, tmax=rest_max * 60)
+    noise_cov = mne.compute_raw_covariance(noise_segment, verbose=True)
+    # Regularize the covariance matrices
+    noise_cov = mne.cov.regularize(noise_cov, noise_segment.info, eeg=0.1, verbose=True)
+
+    #################################################################################################
+
+    # If processing resting, check directories for count
     if return_EO_resting:
         EO_subpath = make_sub_time_win_path(sub_id, EO_resting_save_path)
         EO_subpath_count = len(os.listdir(EO_subpath))
+    if return_EC_resting:
+        raw_ec = load_raw(data_path, sub_id, "EC")
+        EC_subpath = make_sub_time_win_path(sub_id, EC_resting_save_path)
+        EC_subpath_count = len(os.listdir(EC_subpath))
+
+    # If processing epochs, check directory for count
     if return_zepochs:
-        Zepo_subpath = make_sub_time_win_path(sub_id, Z_scored_epochs_save_path)
+        Zepo_subpath = make_sub_time_win_path(sub_id, zscored_epochs_save_path)
         Zepo_subpath_count = len(os.listdir(Zepo_subpath))
-    roi_names_count = len(roi_names)
 
-    # Quick check to see if subject already processed
-    if return EO_subpath_count < roi_names_count:
-        # Z-score Epochs then convert to STC
-        if return_zepochs and Zepo_subpath_count < roi_names_count:
-            sub_epo_fname = f"{sub_id}_preprocessed-epo.fif"
-            print(sub_epo_fname)
-            epochs = mne.read_epochs(os.path.join(epo_path, sub_epo_fname))
+    #################################################################################################
 
-            epochs.set_eeg_reference("average", projection=True)
-
-            data_epo = epochs.get_data()
-            data_zepo = np.zeros_like(data_epo)
-            base_data = epochs.get_data(tmin=tmin, tmax=bmax)
-
-            for epoch_idx in range(data_epochs.shape[0]):
-                for channel_idx in range(data_epochs.shape[1]):
-                    base_mean = np.mean(base_data[epoch_idx, channel_idx, :])
-                    base_std = np.std(base_data[epoch_idx, channel_idx, :])
-                    data_zepo[epoch_idx, channel_idx, :] = (
-                        data_epochs[epoch_idx, channel_idx, :] - base_mean
-                    ) / base_std
-
-            zepochs = mne.EpochsArray(
-                data_zepo,
-                info=epochs.info,
-                tmin=tmin,
-                on_missing="ignore",  # ignore missing Hand LS and Back LS
-                event_id=epochs.event_id,
-                events=epochs.events,
-            )
-            set_montage(zepochs, rawEC.get_montage())
-
-        # Crop resting EC and EO
-        # TODO: perform crop for resting state
-        # TODO: use different noise covariance for resting state
-
-        # Compute noise & data covariance
-        rawEC_crop = rawEC.copy().crop(tmin=60 * rest_min, tmax=60 * rest_max)
-        noise_cov = mne.compute_rawEC_covariance(rawEC_crop, verbose=True)
-
-        ################################### Regularize the covariance matrices ##########################################
-        noise_cov = mne.cov.regularize(
-            noise_cov, rawEC_crop.info, eeg=0.1, verbose=True
+    # If desired and eyes open resting data not yet processed, process it
+    label_ts_EO, label_ts_EC, label_ts_Epochs = None, None, None
+    if return_EO_resting and EO_subpath_count < roi_names_count:
+        label_ts_EO = save_label_time_course(
+            sub_id,
+            "EO",
+            snr,
+            trans,
+            src,
+            bem,
+            raw_eo,
+            noise_cov,
+            labels,
+            EO_subpath,
+            average_dipoles=True,
         )
 
-        #################################### Compute the forward solution ###############################################
-        fwd = mne.make_forward_solution(
-            rawEC.info,
-            trans=trans,
-            src=src,
-            bem=bem,
-            meg=False,
-            eeg=True,
-            n_jobs=-1,
-            verbose=True,
-        )
-        clear_display()
-
-        ###################################### Make the inverse operator ###############################################
-        inverse_operator = mne.minimum_norm.make_inverse_operator(
-            rawEC.info, fwd, noise_cov, verbose=True
+    # If desired and eyes closed resting data not yet processed, process it
+    if return_EC_resting and EC_subpath_count < roi_names_count:
+        label_ts_EC = save_label_time_course(
+            sub_id,
+            "EC",
+            snr,
+            trans,
+            src,
+            bem,
+            raw_ec,
+            noise_cov,
+            labels,
+            EC_subpath,
+            average_dipoles=True,
         )
 
-        if return_zepochs:
-            inverse_operator_zepo = mne.minimum_norm.make_inverse_operator(
-                zepochs.info, fwd, noise_cov, verbose=True
-            )
-        clear_display()
+    #################################################################################################
 
-        ################################# Save source time courses #######################################
-        if len(os.listdir(EO_subpath)) < len(roi_names):
-            print(sub_rawEC_fname)
-            src_cont = inverse_operator["src"]
-            stc_cont = mne.minimum_norm.apply_inverse_rawEC(
-                rawEC, inverse_operator, method="dSPM", **apply_inverse_rawEC_kwargs
-            )
-            # Save the continuous STC file
-            print(f"Saving {sub_id} continuous stc")
-            if not average_dipoles:
-                label_ts = mne.extract_label_time_course(
-                    stc_cont, labels, src_cont, return_generator=True
-                )
-                label_ts.save(os.path.join(save_path_cont, sub_id, overwrite=True))
-            elif average_dipoles:
-                label_ts = mne.extract_label_time_course(
-                    stc_cont, labels, src_cont, mode="mean_flip", return_generator=True
-                )
-                label_ts.save(os.path.join(save_path_cont, sub_id, overwrite=True))
-            clear_display()
+    # If desired and epochs not yet processed, Z-score and source localize
+    if return_zepochs and Zepo_subpath_count < roi_names_count:
+        zepochs = zscore_epochs(sub_id, data_path, tmin, raw_eo)
 
-        ################################# Apply inverse to epochs #######################################
-        if return_zepochs:
-            if len(os.listdir(Zepo_subpath)) < len(roi_names):
-                print(sub_epo_fname)
-                zepochs_stc = mne.minimum_norm.apply_inverse_epochs(
-                    zepochs,
-                    inverse_operator_zepo,
-                    method="dSPM",
-                    **apply_inverse_rawEC_kwargs,
-                )
+        label_ts_Epochs = save_label_time_course(
+            sub_id,
+            "epochs",
+            snr,
+            trans,
+            src,
+            bem,
+            zepochs,
+            noise_cov,
+            labels,
+            Zepo_subpath,
+            average_dipoles=True,
+        )
 
-                src_zepo = inverse_operator_zepo["src"]
-                if not average_dipoles:
-                    label_ts = mne.extract_label_time_course(
-                        stc_zepo, labels, src_zepo, return_generator=True
-                    )
-                    label_ts.save(os.path.join(save_path_zepo, sub_id, overwrite=True))
-                elif average_dipoles:
-                    label_ts = mne.extract_label_time_course(
-                        stc_zepo,
-                        labels,
-                        src_zepo,
-                        mode="mean_flip",
-                        return_generator=True,
-                    )
-                    label_ts.save(os.path.join(save_path_zepo, sub_id, overwrite=True))
-
-                print(f"Saving {sub_id} zepochs stc")
-                clear_display()
-
-    # return zepochs_stc_arr
+    return label_ts_EO, label_ts_EC, label_ts_Epochs
