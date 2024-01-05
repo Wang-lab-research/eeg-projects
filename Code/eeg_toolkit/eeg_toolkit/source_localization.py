@@ -1,4 +1,3 @@
-##################################################################
 from .utils import clear_display, set_montage
 import mne
 import os
@@ -6,8 +5,6 @@ import numpy as np
 from mne.datasets import fetch_fsaverage
 
 mne.set_log_level("WARNING")
-
-#################################################################################################
 
 # Source the fsaverage files
 fs_dir = fetch_fsaverage(verbose=True)
@@ -18,11 +15,6 @@ src = os.path.join(fs_dir, "bem", "fsaverage-ico-5-src.fif")  # surface for dSPM
 bem = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
 model_fname = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem.fif")
 snr = 3.0  # for inverse
-#################################################################################################
-
-
-class InstanceNotDefinedError(Exception):
-    pass
 
 
 def load_raw(data_path, sub_id, condition):
@@ -46,6 +38,22 @@ def make_sub_time_win_path(sub_id, save_path):
 
 
 def zscore_epochs(sub_id, data_path, tmin, raw_eo):
+    """
+    Calculate the z-scores for each epoch in the given EEG dataset.
+
+    Args:
+        sub_id (str): The subject ID.
+        data_path (str): The path to the data directory.
+        tmin (float): The start time of the epochs in seconds.
+        raw_eo (mne.Raw): The raw EEG data.
+
+    Returns:
+        zepochs (mne.EpochsArray): The z-scored epochs.
+
+    Raises:
+        FileNotFoundError: If the epochs file is not found.
+
+    """
     epochs_fname = f"{sub_id}_preprocessed-epo.fif"
     epochs = mne.read_epochs(os.path.join(data_path, epochs_fname))
     epochs.set_eeg_reference("average", projection=True)
@@ -75,6 +83,80 @@ def zscore_epochs(sub_id, data_path, tmin, raw_eo):
     return zepochs
 
 
+def save_stc_file(labels, ts, src, save_path, sub_id, condition, idx=None):
+    stc_mean_flip = mne.labels_to_stc(labels, ts, src=src)
+    if idx is not None:
+        stc_mean_flip.save(
+            os.path.join(save_path, f"{sub_id}_{condition}_{idx}.stc"),
+            overwrite=True,
+        )
+    else:
+        stc_mean_flip.save(
+            os.path.join(save_path, f"{sub_id}_{condition}.stc"),
+            overwrite=True,
+        )
+
+
+def apply_inverse(
+    mne_object,
+    inverse_operator,
+    labels,
+    save_path,
+    sub_id,
+    condition,
+    average_dipoles=True,
+):
+    """
+    Apply inverse operator to MNE object and save STC files.
+
+    Args:
+        mne_object (object): The MNE object to apply inverse operator to.
+        inverse_operator (object): The inverse operator to be used.
+        labels (list): The labels to extract time courses from.
+        save_path (str): The path to save the STC files.
+        sub_id (str): The subject ID.
+        condition (str): The condition.
+        average_dipoles (bool, optional): Whether to average dipoles. Defaults to True.
+
+    Returns:
+        tuple: A tuple containing the label time courses and the subject ID if label time courses contain NaN values.
+    """
+    apply_inverse_kwargs = dict(
+        lambda2=1.0 / snr**2,
+        verbose=True,
+    )
+    sub_id_if_nan = None
+    if isinstance(mne_object, mne.io.fiff.raw.Raw):
+        print("Applying inverse to Raw object")
+        stc = mne.minimum_norm.apply_inverse_raw(
+            mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
+        )
+    elif isinstance(mne_object, mne.epochs.EpochsArray):
+        print("Applying inverse to Epochs object")
+        stc = mne.minimum_norm.apply_inverse_epochs(
+            mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
+        )
+    else:
+        raise ValueError("Invalid mne_object type")
+
+    src = inverse_operator["src"]
+    mode = "mean_flip" if average_dipoles else None
+    label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
+    if np.isnan(label_ts).any():
+        sub_id_if_nan = sub_id
+        # raise ValueError("label_ts contains nan")
+
+    if isinstance(label_ts, list):
+        for idx, epoch_ts in enumerate(label_ts):
+            print(f"Saving STC of {sub_id} for epoch {idx}")
+            save_stc_file(labels, epoch_ts, src, save_path, sub_id, condition, idx)
+    else:
+        print(f"Saving {condition} of {sub_id}")
+        save_stc_file(labels, label_ts, src, save_path, sub_id, condition)
+
+    return label_ts, sub_id_if_nan
+
+
 def save_label_time_course(
     sub_id,
     condition,
@@ -88,11 +170,25 @@ def save_label_time_course(
     save_path,
     average_dipoles=True,
 ):
-    apply_inverse_kwargs = dict(
-        lambda2=1.0 / snr**2,
-        verbose=True,
-    )
+    """
+    Save the time course data for specified labels.
 
+    Parameters:
+        sub_id (str): The subject ID.
+        condition (str): The condition of the data.
+        snr (float): The signal-to-noise ratio.
+        trans (str): The path to the transformation matrix file.
+        src (str): The path to the source space file.
+        bem (str): The path to the BEM model file.
+        mne_object (MNE object): The MNE object containing the data.
+        noise_cov (MNE object): The noise covariance matrix.
+        labels (list of str): The labels to save the time course for.
+        save_path (str): The path to save the time course data.
+        average_dipoles (bool, optional): Whether to average dipoles (default: True).
+
+    Returns:
+        None
+    """
     fwd = mne.make_forward_solution(
         mne_object.info,
         trans=trans,
@@ -109,72 +205,16 @@ def save_label_time_course(
         mne_object.info, fwd, noise_cov, verbose=True
     )
 
-    def apply_inverse_Raw(
+    label_ts, sub_id_if_nan = apply_inverse(
         mne_object,
         inverse_operator,
+        labels,
         save_path,
         sub_id,
         condition,
-        average_dipoles=False,
-    ):
-        sub_id_if_nan = None
-        stc = mne.minimum_norm.apply_inverse_raw(
-            mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
-        )
-        src = inverse_operator["src"]
-        print(f"Saving {sub_id} {condition}")
-        mode = "mean_flip" if average_dipoles else None
-        label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
-        if np.isnan(label_ts).any():
-            sub_id_if_nan = sub_id
-            # raise ValueError("label_ts contains nan")
-        stc_mean_flip = mne.labels_to_stc(labels, label_ts, src=src)
-        stc_mean_flip.save(
-            os.path.join(save_path, f"{sub_id}_{condition}.stc"), overwrite=True
-        )
-        return label_ts, sub_id_if_nan
+        average_dipoles=True,
+    )
 
-    def apply_inverse_Epochs(
-        mne_object,
-        inverse_operator,
-        save_path,
-        sub_id,
-        condition,
-        average_dipoles=False,
-    ):
-        sub_id_if_nan = None
-        stc = mne.minimum_norm.apply_inverse_epochs(
-            mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
-        )
-        src = inverse_operator["src"]
-        print(f"Saving {sub_id} {condition}")
-        mode = "mean_flip" if average_dipoles else None
-        label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
-        if np.isnan(label_ts).any():
-            sub_id_if_nan = sub_id
-            # raise ValueError("label_ts contains nan")
-
-        for epoch_idx, epoch_ts in enumerate(label_ts):
-            print(f"Saving STC for epoch {epoch_idx}")
-            stc_mean_flip = mne.labels_to_stc(labels, epoch_ts, src=src)
-            stc_mean_flip.save(
-                os.path.join(save_path, f"{sub_id}_{condition}_{epoch_idx}.stc"),
-                overwrite=True,
-            )
-        return label_ts, sub_id_if_nan
-
-    if isinstance(mne_object, mne.io.fiff.raw.Raw):
-        print("Applying inverse to Raw object")
-        label_ts, sub_id_if_nan = apply_inverse_Raw(
-            mne_object, inverse_operator, save_path, sub_id, condition, average_dipoles
-        )
-    elif isinstance(mne_object, mne.epochs.EpochsArray):
-        print("Applying inverse to Epochs object")
-        label_ts, sub_id_if_nan = apply_inverse_Epochs(
-            mne_object, inverse_operator, save_path, sub_id, condition, average_dipoles
-        )
-    else:
-        raise ValueError("Invalid mne_object type")
     return label_ts, sub_id_if_nan
     clear_display()
 
@@ -188,8 +228,8 @@ def to_source(
     roi_names,
     times_tup,
     return_zepochs=True,
-    return_EC_resting=True,
-    return_EO_resting=True,
+    return_EC_resting=False,
+    return_EO_resting=False,
     average_dipoles=True,
 ):
     """
@@ -210,8 +250,6 @@ def to_source(
     Returns:
         None
     """
-
-    #################################################################################################
 
     # Convert ROI names to labels
     labels = [
