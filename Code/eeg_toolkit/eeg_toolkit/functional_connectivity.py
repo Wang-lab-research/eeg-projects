@@ -9,7 +9,7 @@ import mne
 
 
 # TODO: Load in {sub_id}_stim_labels.mat and {sub_id}_pain_ratings.mat} from processed_data_path
-def separate_epochs_by_stim(sub_id, processed_data_path, stc_array, pain_thresh=None):
+def separate_epochs_by_stim(sub_id, processed_data_path, stc_data_path, pain_thresh=None):
     # Load in stimulus labels and pain ratings
     print(f"Reading stimulus labels and pain ratings for Subject {sub_id}...")
 
@@ -56,8 +56,9 @@ def separate_epochs_by_stim(sub_id, processed_data_path, stc_array, pain_thresh=
         el for i, el in enumerate(pain_ratings) if i not in hand_trials
     ]
 
-    deserialized_object = utils.unpickle_data(data_path)
+    label_ts = utils.unpickle_data(stc_data_path)
 
+    hand_LS = label_ts[hand_trials, 0]
     hand_All_Stim_epochs = (hand_LS, hand_NS, hand_HS)
     back_All_Stim_epochs = (back_LS, back_NS, back_HS)
     return hand_All_Stim_epochs, back_All_Stim_epochs, pain_ratings, stim_labels
