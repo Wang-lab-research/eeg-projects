@@ -1,8 +1,11 @@
-import utils
 import mne
 import os
 import numpy as np
 from mne.datasets import fetch_fsaverage
+import sys
+
+sys.path.append("/home/wanglab/Documents/George Kenefati/Code/eeg_toolkit/")
+from eeg_toolkit import utils  # noqa: E402
 
 mne.set_log_level("WARNING")
 
@@ -74,7 +77,7 @@ def zscore_epochs(sub_id, data_path, tmin, raw_eo):
     return zepochs
 
 
-def apply_inverse(
+def apply_inverse_and_save(
     mne_object,
     inverse_operator,
     labels,
@@ -99,20 +102,20 @@ def apply_inverse(
     Returns:
         tuple: A tuple containing the label time courses and the subject ID if label time courses contain NaN values.
     """
-    apply_inverse_kwargs = dict(
+    apply_inverse_and_save_kwargs = dict(
         lambda2=1.0 / snr**2,
         verbose=True,
     )
     sub_id_if_nan = None
     if isinstance(mne_object, mne.io.fiff.raw.Raw):
         print("Applying inverse to Raw object")
-        stc = mne.minimum_norm.apply_inverse_raw(
-            mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
+        stc = mne.minimum_norm.apply_inverse_and_save_raw(
+            mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
         )
     elif isinstance(mne_object, mne.epochs.EpochsArray):
         print("Applying inverse to Epochs object")
-        stc = mne.minimum_norm.apply_inverse_epochs(
-            mne_object, inverse_operator, method="dSPM", **apply_inverse_kwargs
+        stc = mne.minimum_norm.apply_inverse_and_save_epochs(
+            mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
         )
     else:
         raise ValueError("Invalid mne_object type")
@@ -179,7 +182,7 @@ def compute_fwd_and_inv(
         mne_object.info, fwd, noise_cov, verbose=True
     )
 
-    label_ts, sub_id_if_nan = apply_inverse(
+    label_ts, sub_id_if_nan = apply_inverse_and_save(
         mne_object,
         inverse_operator,
         labels,
