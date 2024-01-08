@@ -51,8 +51,8 @@ def pickle_data(save_path, fname, data):
     print(f"Saved {fname} to {save_path}.")
 
 
-def unpickle_data(data_path):
-    fname = glob(os.path.join(data_path, "*.pkl"))
+def unpickle_data(file_path):
+    fname = glob(os.path.join(file_path, "*.pkl"))
     with open(fname, "rb") as f:
         deserialized_object = pickle.load(f)
     return deserialized_object

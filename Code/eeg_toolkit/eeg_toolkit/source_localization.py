@@ -127,7 +127,6 @@ def apply_inverse_and_save(
         sub_id_if_nan = sub_id
         # raise ValueError("label_ts contains nan")
 
-    print(f"Saving STC {condition} of Subject {sub_id}")
     utils.pickle_data(save_path, save_fname, label_ts)
 
     return label_ts, sub_id_if_nan

@@ -1283,7 +1283,6 @@ def get_binary_pain_trials(sub_id, pain_ratings_raw, pain_thresh, processed_data
         "Pain": 1,
         "No Pain": 0,
     }
-    conditions = ["Pain", "No Pain"]
 
     # Count pain and no-pain trials
     unique, counts = np.unique(pain_ratings, return_counts=True)
@@ -1306,5 +1305,5 @@ def get_binary_pain_trials(sub_id, pain_ratings_raw, pain_thresh, processed_data
         # set pain ratings to None
         pain_ratings = None
 
-    return pain_ratings, event_ids_pain_dict, conditions
+    return pain_ratings
 

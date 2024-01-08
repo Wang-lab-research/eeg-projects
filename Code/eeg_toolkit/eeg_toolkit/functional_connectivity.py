@@ -28,17 +28,18 @@ def separate_epochs_by_stim(sub_id, processed_data_path, stc_array, pain_thresh=
     print(f"*pain_ratings_raw length = {len(pain_ratings_raw)}*\n")
 
     if pain_thresh is not None:
-        (
-            pain_ratings,
-            event_ids_pain_dict,
-            conditions,
-        ) = preprocess.get_binary_pain_trials(
+        pain_ratings = preprocess.get_binary_pain_trials(
             sub_id, pain_ratings_raw, pain_thresh, processed_data_path
         )
+        # use pain/no-pain dict for counting trial ratio
+        # pain_events_dict = {
+        #     "Pain": 1,
+        #     "No Pain": 0,
+        # }
+        # pain_conditions = ["Pain", "No Pain"]
 
     else:
         pain_ratings = pain_ratings_raw
-        event_ids_pain_dict, conditions = None, None
 
     ##############################################################################################
     # Identify trial indices
@@ -55,7 +56,7 @@ def separate_epochs_by_stim(sub_id, processed_data_path, stc_array, pain_thresh=
         el for i, el in enumerate(pain_ratings) if i not in hand_trials
     ]
 
-    deserialized_object = utils.unpickle(data_path)
+    deserialized_object = utils.unpickle_data(data_path)
 
     hand_All_Stim_epochs = (hand_LS, hand_NS, hand_HS)
     back_All_Stim_epochs = (back_LS, back_NS, back_HS)
