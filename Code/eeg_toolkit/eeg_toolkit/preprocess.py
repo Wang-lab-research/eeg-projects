@@ -1272,3 +1272,39 @@ def to_epo(raw, sub_id, data_path, save_path):
     # verify stim_epochs object looks correct
     print("FINAL EPOCH COUNT:", len(stim_epochs))
     stim_epochs
+
+
+def get_binary_pain_trials(sub_id, pain_ratings_raw, pain_thresh, processed_data_path):
+    pain_ratings = [
+        1 if el > pain_thresh else 0 for i, el in enumerate(pain_ratings_raw)
+    ]
+    # use pain/no-pain dict for counting trial ratio
+    event_ids_pain_dict = {
+        "Pain": 1,
+        "No Pain": 0,
+    }
+    conditions = ["Pain", "No Pain"]
+
+    # Count pain and no-pain trials
+    unique, counts = np.unique(pain_ratings, return_counts=True)
+    event_ids_inv = {v: k for k, v in event_ids_pain_dict.items()}
+    unique_labels = np.vectorize(event_ids_inv.get)(unique)
+    trial_counts_dict = dict(zip(unique_labels, counts))
+    pain_trials_counts = list(trial_counts_dict.values())
+
+    # If no painful trials or not enough, take note of sub_id
+    if (
+        len(pain_trials_counts) == 1
+        or np.all([el >= 4 for el in pain_trials_counts]) is False
+    ):
+        # save record of which subjects don't meet the requirement
+        with open(
+            processed_data_path + "Insufficient_Pain_Trials_Sub_IDs.txt", "a"
+        ) as txt_file:
+            txt_file.write(sub_id + "\n")
+
+        # set pain ratings to None
+        pain_ratings = None
+
+    return pain_ratings, event_ids_pain_dict, conditions
+

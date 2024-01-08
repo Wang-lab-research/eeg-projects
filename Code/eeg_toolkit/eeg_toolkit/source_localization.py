@@ -1,4 +1,4 @@
-from .utils import clear_display, set_montage
+import utils
 import mne
 import os
 import numpy as np
@@ -26,15 +26,6 @@ def load_raw(data_path, sub_id, condition):
     raw = mne.io.read_raw_fif(raw_path, preload=True)
     raw.set_eeg_reference("average", projection=True)
     return raw
-
-
-def make_sub_time_win_path(sub_id, save_path):
-    """
-    Make a subject's time window data path.
-    """
-    sub_path = os.path.join(save_path, sub_id)
-    os.makedirs(sub_path, exist_ok=True)
-    return sub_path
 
 
 def zscore_epochs(sub_id, data_path, tmin, raw_eo):
@@ -78,23 +69,9 @@ def zscore_epochs(sub_id, data_path, tmin, raw_eo):
         event_id=epochs.event_id,
         events=epochs.events,
     )
-    set_montage(zepochs, raw_eo.get_montage())
+    utils.set_montage(zepochs, raw_eo.get_montage())
 
     return zepochs
-
-
-def save_stc_file(labels, ts, src, save_path, sub_id, condition, idx=None):
-    stc_mean_flip = mne.labels_to_stc(labels, ts, src=src)
-    if idx is not None:
-        stc_mean_flip.save(
-            os.path.join(save_path, f"{sub_id}_{condition}_{idx}.stc"),
-            overwrite=True,
-        )
-    else:
-        stc_mean_flip.save(
-            os.path.join(save_path, f"{sub_id}_{condition}.stc"),
-            overwrite=True,
-        )
 
 
 def apply_inverse(
@@ -102,6 +79,7 @@ def apply_inverse(
     inverse_operator,
     labels,
     save_path,
+    save_fname,
     sub_id,
     condition,
     average_dipoles=True,
@@ -146,18 +124,13 @@ def apply_inverse(
         sub_id_if_nan = sub_id
         # raise ValueError("label_ts contains nan")
 
-    if isinstance(label_ts, list):
-        for idx, epoch_ts in enumerate(label_ts):
-            print(f"Saving STC of {sub_id} for epoch {idx}")
-            save_stc_file(labels, epoch_ts, src, save_path, sub_id, condition, idx)
-    else:
-        print(f"Saving {condition} of {sub_id}")
-        save_stc_file(labels, label_ts, src, save_path, sub_id, condition)
+    print(f"Saving STC {condition} of Subject {sub_id}")
+    utils.pickle_data(save_path, save_fname, label_ts)
 
     return label_ts, sub_id_if_nan
 
 
-def save_label_time_course(
+def compute_fwd_and_inv(
     sub_id,
     condition,
     snr,
@@ -168,6 +141,7 @@ def save_label_time_course(
     noise_cov,
     labels,
     save_path,
+    save_fname,
     average_dipoles=True,
 ):
     """
@@ -199,7 +173,7 @@ def save_label_time_course(
         n_jobs=-1,
         verbose=True,
     )
-    clear_display()
+    utils.clear_display()
 
     inverse_operator = mne.minimum_norm.make_inverse_operator(
         mne_object.info, fwd, noise_cov, verbose=True
@@ -210,13 +184,14 @@ def save_label_time_course(
         inverse_operator,
         labels,
         save_path,
+        save_fname,
         sub_id,
         condition,
         average_dipoles=True,
     )
 
     return label_ts, sub_id_if_nan
-    clear_display()
+    utils.clear_display()
 
 
 def to_source(
@@ -256,7 +231,6 @@ def to_source(
         mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
         for roi in roi_names
     ]
-    roi_names_count = len(roi_names)
 
     # Extract time window information from tuple arguments
     tmin, tmax, bmax = times_tup
@@ -277,25 +251,24 @@ def to_source(
 
     # If processing resting, check directories for count
     if return_EO_resting:
-        EO_subpath = make_sub_time_win_path(sub_id, EO_resting_save_path)
-        EO_subpath_count = len(os.listdir(EO_subpath))
+        # TODO: uncomment when noise_segment completed
+        # raw_eo = load_raw(data_path, sub_id, condition="EO")
+        EO_save_fname = f"{sub_id}_EO.pkl"
     if return_EC_resting:
-        raw_ec = load_raw(data_path, sub_id, "EC")
-        EC_subpath = make_sub_time_win_path(sub_id, EC_resting_save_path)
-        EC_subpath_count = len(os.listdir(EC_subpath))
-
+        raw_ec = load_raw(data_path, sub_id, condition="EC")
+        EC_save_fname = f"{sub_id}_EC.pkl"
     # If processing epochs, check directory for count
     if return_zepochs:
-        Zepo_subpath = make_sub_time_win_path(sub_id, zscored_epochs_save_path)
-        Zepo_subpath_count = len(os.listdir(Zepo_subpath))
+        zepochs_save_fname = f"{sub_id}_epochs.pkl"
 
-    #################################################################################################
-
-    # If desired and eyes open resting data not yet processed, process it
+    # Preallocate
     label_ts_EO, label_ts_EC, label_ts_Epochs = None, None, None
     sub_id_if_nan = None
-    if return_EO_resting and EO_subpath_count < roi_names_count:
-        label_ts_EO, sub_id_if_nan = save_label_time_course(
+    # If desired and eyes open resting data not yet processed, process it
+    if return_EO_resting and not os.path.exists(
+        f"{EO_resting_save_path}/{EO_save_fname}"
+    ):
+        label_ts_EO, sub_id_if_nan = compute_fwd_and_inv(
             sub_id,
             "EO",
             snr,
@@ -305,13 +278,16 @@ def to_source(
             raw_eo,
             noise_cov,
             labels,
-            EO_subpath,
+            EO_resting_save_path,
+            EO_save_fname,
             average_dipoles=True,
         )
 
     # If desired and eyes closed resting data not yet processed, process it
-    if return_EC_resting and EC_subpath_count < roi_names_count:
-        label_ts_EC, sub_id_if_nan = save_label_time_course(
+    if return_EC_resting and not os.path.exists(
+        f"{EC_resting_save_path}/{EC_save_fname}"
+    ):
+        label_ts_EC, sub_id_if_nan = compute_fwd_and_inv(
             sub_id,
             "EC",
             snr,
@@ -321,17 +297,18 @@ def to_source(
             raw_ec,
             noise_cov,
             labels,
-            EC_subpath,
+            EC_resting_save_path,
+            EC_save_fname,
             average_dipoles=True,
         )
 
-    #################################################################################################
-
     # If desired and epochs not yet processed, Z-score and source localize
-    if return_zepochs and Zepo_subpath_count < roi_names_count:
+    if return_zepochs and not os.path.exists(
+        f"{zscored_epochs_save_path}/{zepochs_save_fname}"
+    ):
         zepochs = zscore_epochs(sub_id, data_path, tmin, raw_eo)
 
-        label_ts_Epochs, sub_id_if_nan = save_label_time_course(
+        label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
             sub_id,
             "epochs",
             snr,
@@ -341,7 +318,8 @@ def to_source(
             zepochs,
             noise_cov,
             labels,
-            Zepo_subpath,
+            zscored_epochs_save_path,
+            zepochs_save_fname,
             average_dipoles=True,
         )
 

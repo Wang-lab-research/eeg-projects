@@ -1,4 +1,5 @@
-# from .utils import *
+import utils
+import preprocess
 import mne_connectivity
 import matplotlib.pyplot as plt
 import scipy.io as sio
@@ -7,7 +8,60 @@ import numpy as np
 import mne
 
 
-# Define function for plotting con matrices
+# TODO: Load in {sub_id}_stim_labels.mat and {sub_id}_pain_ratings.mat} from processed_data_path
+def separate_epochs_by_stim(sub_id, processed_data_path, stc_array, pain_thresh=None):
+    # Load in stimulus labels and pain ratings
+    print(f"Reading stimulus labels and pain ratings for Subject {sub_id}...")
+
+    stim_labels = sio.loadmat(
+        os.path.join(processed_data_path, sub_id + "_stim_labels.mat")
+    )
+    stim_labels = stim_labels["stim_labels"].tolist()[0]
+    print(f"\n*stim_labels length = {len(stim_labels)}*")
+
+    # Load in pain rating for each stimuli
+    pain_ratings_raw = sio.loadmat(
+        os.path.join(processed_data_path, sub_id + "_pain_ratings.mat")
+    )
+    pain_ratings_raw = pain_ratings_raw["pain_ratings"].tolist()[0]
+
+    print(f"*pain_ratings_raw length = {len(pain_ratings_raw)}*\n")
+
+    if pain_thresh is not None:
+        (
+            pain_ratings,
+            event_ids_pain_dict,
+            conditions,
+        ) = preprocess.get_binary_pain_trials(
+            sub_id, pain_ratings_raw, pain_thresh, processed_data_path
+        )
+
+    else:
+        pain_ratings = pain_ratings_raw
+        event_ids_pain_dict, conditions = None, None
+
+    ##############################################################################################
+    # Identify trial indices
+    back_trials = [i for i, el in enumerate(stim_labels) if el > 5]
+    hand_trials = [i for i, el in enumerate(stim_labels) if el <= 5]
+
+    # delete other trials from all relevant objects
+    stim_labels_hand = [el for i, el in enumerate(stim_labels) if i not in back_trials]
+    stim_labels_back = [el for i, el in enumerate(stim_labels) if i not in hand_trials]
+    pain_ratings_hand = [
+        el for i, el in enumerate(pain_ratings) if i not in back_trials
+    ]
+    pain_ratings_back = [
+        el for i, el in enumerate(pain_ratings) if i not in hand_trials
+    ]
+
+    deserialized_object = utils.unpickle(data_path)
+
+    hand_All_Stim_epochs = (hand_LS, hand_NS, hand_HS)
+    back_All_Stim_epochs = (back_LS, back_NS, back_HS)
+    return hand_All_Stim_epochs, back_All_Stim_epochs, pain_ratings, stim_labels
+
+
 def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, foi):
     """Visualize the connectivity matrix."""
     fig, ax = plt.subplots(1, n_con_methods, figsize=(6 * n_con_methods, 6))
