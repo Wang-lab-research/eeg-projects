@@ -1,7 +1,6 @@
 import os
 import mne
 from IPython import display
-import glob
 import pickle
 
 
@@ -52,7 +51,6 @@ def pickle_data(save_path, fname, data):
 
 
 def unpickle_data(file_path):
-    fname = glob(os.path.join(file_path, "*.pkl"))
-    with open(fname, "rb") as f:
+    with open(file_path, "rb") as f:
         deserialized_object = pickle.load(f)
     return deserialized_object

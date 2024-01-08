@@ -1,6 +1,5 @@
-import utils
-import preprocess
-import mne_connectivity
+from eeg_toolkit import utils, preprocess
+import mne_connectivity as mne_conn
 import matplotlib.pyplot as plt
 import scipy.io as sio
 import os
@@ -8,8 +7,46 @@ import numpy as np
 import mne
 
 
-# TODO: Load in {sub_id}_stim_labels.mat and {sub_id}_pain_ratings.mat} from processed_data_path
-def separate_epochs_by_stim(sub_id, processed_data_path, stc_data_path, pain_thresh=None):
+def get_info_by_stim(stim_label, stim_labels, pain_ratings):
+    """
+    Get the information by stimulus label.
+
+    Parameters:
+        stim_label (any): The stimulus label to search for.
+        stim_labels (list): A list of stimulus labels.
+        pain_ratings (list): A list of pain ratings.
+
+    Returns:
+        tuple: A tuple containing two lists. The first list contains the indices of the stimulus labels that match the given stim_label. The second list contains the corresponding pain ratings for those stimulus labels.
+    """
+    site_stim_labels = [i for i, el in enumerate(stim_labels) if el == stim_label]
+    site_stim_ratings = [
+        el for i, el in enumerate(pain_ratings) if i in site_stim_labels
+    ]
+
+    return site_stim_labels, site_stim_ratings
+
+
+# Load in {sub_id}_stim_labels.mat and {sub_id}_pain_ratings.mat} from processed_data_path
+def separate_epochs_by_stim(
+    sub_id, processed_data_path, stc_data_path, pain_thresh=None
+):
+    """
+    Separates epochs by stimulus for a given subject.
+
+    :param sub_id: The ID of the subject.
+    :param processed_data_path: The path to the processed data.
+    :param stc_data_path: The path to the label time courses.
+    :param pain_thresh: The pain threshold. Default is None.
+
+    Returns:
+    - hand_all_label_ts: A tuple containing the label time courses for hand stimuli.
+    - back_all_label_ts: A tuple containing the label time courses for back stimuli.
+    - hand_all_ratings: A tuple containing the pain ratings for hand stimuli.
+    - back_all_ratings: A tuple containing the pain ratings for back stimuli.
+    """
+    ##############################################################################################
+
     # Load in stimulus labels and pain ratings
     print(f"Reading stimulus labels and pain ratings for Subject {sub_id}...")
 
@@ -43,25 +80,92 @@ def separate_epochs_by_stim(sub_id, processed_data_path, stc_data_path, pain_thr
 
     ##############################################################################################
     # Identify trial indices
-    back_trials = [i for i, el in enumerate(stim_labels) if el > 5]
-    hand_trials = [i for i, el in enumerate(stim_labels) if el <= 5]
 
-    # delete other trials from all relevant objects
-    stim_labels_hand = [el for i, el in enumerate(stim_labels) if i not in back_trials]
-    stim_labels_back = [el for i, el in enumerate(stim_labels) if i not in hand_trials]
-    pain_ratings_hand = [
-        el for i, el in enumerate(pain_ratings) if i not in back_trials
-    ]
-    pain_ratings_back = [
-        el for i, el in enumerate(pain_ratings) if i not in hand_trials
-    ]
+    hand_NS_labels, hand_NS_ratings = get_info_by_stim(5, stim_labels, pain_ratings)
+    hand_LS_labels, hand_LS_ratings = get_info_by_stim(4, stim_labels, pain_ratings)
+    hand_HS_labels, hand_HS_ratings = get_info_by_stim(3, stim_labels, pain_ratings)
 
-    label_ts = utils.unpickle_data(stc_data_path)
+    back_NS_labels, back_NS_ratings = get_info_by_stim(8, stim_labels, pain_ratings)
+    back_LS_labels, back_LS_ratings = get_info_by_stim(7, stim_labels, pain_ratings)
+    back_HS_labels, back_HS_ratings = get_info_by_stim(6, stim_labels, pain_ratings)
 
-    hand_LS = label_ts[hand_trials, 0]
-    hand_All_Stim_epochs = (hand_LS, hand_NS, hand_HS)
-    back_All_Stim_epochs = (back_LS, back_NS, back_HS)
-    return hand_All_Stim_epochs, back_All_Stim_epochs, pain_ratings, stim_labels
+    ##############################################################################################
+    # Load in label time courses and separate epochs by stimulus
+
+    label_ts = utils.unpickle_data(stc_data_path / f"{sub_id}_epochs.pkl")
+    hand_NS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_NS_labels]
+    hand_LS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_LS_labels]
+    hand_HS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_HS_labels]
+
+    back_NS_label_ts = [el for i, el in enumerate(label_ts) if i in back_NS_labels]
+    back_LS_label_ts = [el for i, el in enumerate(label_ts) if i in back_LS_labels]
+    back_HS_label_ts = [el for i, el in enumerate(label_ts) if i in back_HS_labels]
+
+    ##############################################################################################
+    # Return labels and pain ratings
+    hand_all_label_ts = (hand_NS_label_ts, hand_LS_label_ts, hand_HS_label_ts)
+    back_all_label_ts = (back_NS_label_ts, back_LS_label_ts, back_HS_label_ts)
+
+    hand_all_ratings = (hand_NS_ratings, hand_LS_ratings, hand_HS_ratings)
+    back_all_ratings = (back_NS_ratings, back_LS_ratings, back_HS_ratings)
+
+    return hand_all_label_ts, back_all_label_ts, hand_all_ratings, back_all_ratings
+
+
+def compute_connectivity_epochs(
+    label_ts, roi_names, method, Freq_Bands, tmin, tmax, sfreq=400
+):
+    # Specify the frequency band
+    min_freq = np.min(list(Freq_Bands.values()))
+    max_freq = np.max(list(Freq_Bands.values()))
+
+    # Prepare the freq points
+    freqs = np.linspace(min_freq, max_freq, int((max_freq - min_freq) * 4 + 1))
+
+    fmin = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
+    fmax = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
+
+    # Compute connectivity over trials
+    con_epochs = mne_conn.spectral_connectivity_epochs(
+        epochs,
+        method=method,
+        sfreq=sfreq,
+        mode="cwt_morlet",
+        cwt_freqs=freqs,
+        fmin=fmin,
+        fmax=fmax,
+        faverage=True,
+        tmin=tmin,
+        tmax=tmax,
+        cwt_n_cycles=4,
+    )
+
+    return con_epochs
+
+
+def compute_connectivity_resting_state(
+    label_ts, roi_names, method, Freq_Bands, sfreq, condition
+):
+    con_matrices = {}
+    for band, freq in Freq_Bands.items():
+        (
+            con,
+            freqs,
+            times,
+            n_epochs,
+            n_tapers,
+        ) = mne_conn.spectral_connectivity(
+            raw,
+            method=method,
+            mode="multitaper",
+            sfreq=sfreq,
+            fmin=freq[0],
+            fmax=freq[1],
+            faverage=True,
+            mt_adaptive=True,
+            n_jobs=1,
+        )
+        con_matrices[(band, method)] = con
 
 
 def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, foi):
@@ -109,17 +213,13 @@ def plot_connectivity(con_epochs, t_con_max, roi_names, con_methods):
         plt.show()
 
 
-def plot_connectivity_circle(con_epochs_array, con_methods, Freq_Bands, roi_names):
-    import matplotlib.pyplot as plt
-    import mne
-
-    for band, method in product(Freq_Bands, con_methods):
-        con = con_epochs_array[con_methods.index(method)][..., band]
+def plot_connectivity_circle(con_matrices, con_methods, Freq_Bands, roi_names):
+    for (band, method), con in con_matrices.items():
         plt.figure(figsize=(10, 8))
         mne.viz.plot_connectivity_circle(
             con,
             roi_names,
-            title=f"{band.upper()} {method.upper()} Epochs Connectivity",
+            title=f"{condition.upper()} Condition {band.upper()} {method.upper()} Connectivity",
             facecolor="white",
             textcolor="black",
             node_edgecolor="black",
@@ -161,105 +261,3 @@ def plot_global_connectivity(epochs, tmin, tmax, n_connections, con_epochs, Freq
             plt.xlabel("Time (s)")
             plt.ylabel(f"Global {k} wPLI over trials")
             plt.title(f"Global {k} wPLI peaks {times[t_con_max]:.3f}s after stimulus")
-
-
-def compute_connectivity_epochs(data_path, roi_names, con_methods, Freq_Bands, sfreq):
-    # Load the data
-    fname = os.path.join(data_path + ".stc")
-    stc = mne.read_source_estimate(fname)
-
-    # Create epochs from the data
-    epochs_data = np.transpose(np.array(data), (1, 0, 2))
-    _, n_channels, n_times = epochs_data.shape
-
-    info = mne.create_info(roi_names, sfreq)
-    epochs = mne.EpochsArray(epochs_data, info)
-
-    n_freq_bands = len(Freq_Bands)
-    min_freq = np.min(list(Freq_Bands.values()))
-    max_freq = np.max(list(Freq_Bands.values()))
-
-    # Prepare the freq points
-    freqs = np.linspace(min_freq, max_freq, int((max_freq - min_freq) * 4 + 1))
-
-    fmin = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
-    fmax = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
-
-    # We specify the connectivity measurements
-    connectivity_methods = [
-        "wpli",
-        "dpli",
-        "plv",
-    ]
-    n_con_methods = len(connectivity_methods)
-
-    # Compute connectivity over trials
-    con_epochs = spectral_connectivity_epochs(
-        epochs,
-        method=connectivity_methods,
-        sfreq=sfreq,
-        mode="cwt_morlet",
-        cwt_freqs=freqs,
-        fmin=fmin,
-        fmax=fmax,
-        faverage=True,
-        tmin=tmin,
-        tmax=tmax,
-        cwt_n_cycles=4,
-    )
-
-    return con_epochs
-
-
-def compute_connectivity_resting_state(
-    data_path, roi_names, con_methods, Freq_Bands, sfreq, condition
-):
-    # Load the data
-    data = {}
-    for roi in roi_names:
-        data_file = os.path.join(data_path, roi + ".mat")
-        data[roi] = sio.loadmat(data_file)  # Assumes .mat files are named after the ROI
-
-    # Create raw data from the data
-    raw_data = np.array([data[roi] for roi in roi_names])
-    info = mne.create_info(
-        roi_names, sfreq
-    )  # Assumes same sampling frequency for all data
-    raw = mne.io.RawArray(raw_data, info)
-
-    # Compute connectivity
-    con_matrices = {}
-    for band, freq in Freq_Bands.items():
-        for method in con_methods:
-            (
-                con,
-                freqs,
-                times,
-                n_epochs,
-                n_tapers,
-            ) = mne_connectivity.spectral_connectivity(
-                raw,
-                method=method,
-                mode="multitaper",
-                sfreq=sfreq,
-                fmin=freq[0],
-                fmax=freq[1],
-                faverage=True,
-                mt_adaptive=True,
-                n_jobs=1,
-            )
-            con_matrices[(band, method)] = con
-
-    # Plotting
-    for (band, method), con in con_matrices.items():
-        plt.figure(figsize=(10, 8))
-        mne.viz.plot_connectivity_circle(
-            con,
-            roi_names,
-            title=f"{condition.upper()} Condition {band.upper()} {method.upper()} Connectivity",
-            facecolor="white",
-            textcolor="black",
-            node_edgecolor="black",
-            fontsize_names=8,
-        )
-        plt.show()
