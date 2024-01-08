@@ -113,33 +113,45 @@ def separate_epochs_by_stim(
 
 
 def compute_connectivity_epochs(
-    label_ts, roi_names, method, Freq_Bands, tmin, tmax, sfreq=400
+    label_ts,
+    roi_names,
+    method,
+    Freq_Bands,
+    tmin,
+    tmax,
+    sfreq=400,
+    plot_freq_matrix=False,
 ):
-    # Specify the frequency band
-    min_freq = np.min(list(Freq_Bands.values()))
-    max_freq = np.max(list(Freq_Bands.values()))
+    if plot_freq_matrix is True:
+        fmin, fmax = 4, 100
+        # Compute connectivity over trials
+        con_epochs = mne_conn.spectral_connectivity_epochs(
+            label_ts,
+            method=method,
+            mode="multitaper",
+            sfreq=sfreq,
+            fmin=fmin,
+            fmax=fmax,
+            mt_adaptive=True,
+            n_jobs=1,
+        )
+        plot_con_freqx(con_epochs, roi_names)
+    else:
+        fmins = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
+        fmaxs = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
 
-    # Prepare the freq points
-    freqs = np.linspace(min_freq, max_freq, int((max_freq - min_freq) * 4 + 1))
-
-    fmin = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
-    fmax = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
-
-    # Compute connectivity over trials
-    con_epochs = mne_conn.spectral_connectivity_epochs(
-        epochs,
-        method=method,
-        sfreq=sfreq,
-        mode="cwt_morlet",
-        cwt_freqs=freqs,
-        fmin=fmin,
-        fmax=fmax,
-        faverage=True,
-        tmin=tmin,
-        tmax=tmax,
-        cwt_n_cycles=4,
-    )
-
+        for fmin, fmax in zip(fmins, fmaxs):
+            con_epochs = mne_conn.spectral_connectivity_epochs(
+                label_ts,
+                method=method,
+                mode="multitaper",
+                sfreq=sfreq,
+                fmin=fmin,
+                fmax=fmax,
+                mt_adaptive=True,
+                n_jobs=1,
+            )
+    print(con_epochs.shape)
     return con_epochs
 
 
@@ -166,6 +178,76 @@ def compute_connectivity_resting_state(
             n_jobs=1,
         )
         con_matrices[(band, method)] = con
+
+
+def plot_con_freqx(con_epochs, roi_names):
+    freqs = con_epochs.freqs
+    fmin, fmax = 4, 100
+    n_rows, n_cols = con_epochs.get_data(output="dense").shape[:2]
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(30, 20), sharex=True, sharey=True)
+    plt.subplots_adjust(wspace=0, hspace=0)
+    for i in range(n_rows):
+        for j in range(i + 1):
+            if i == j:
+                axes[i, j].set_axis_off()
+                continue
+
+            # get data
+            con_data = con_epochs.get_data(output="dense")[i, j, :]
+            axes[i, j].plot(freqs, con_data)
+            axes[j, i].plot(freqs, con_data)
+
+            if j == 0:
+                axes[i, j].set_ylabel(roi_names[i])
+                axes[0, i].set_title(roi_names[i])
+            if i == (n_rows - 1):
+                axes[i, j].set_xlabel(roi_names[j])
+            axes[i, j].set(xlim=[fmin, fmax], ylim=[-0.2, 1])
+            axes[j, i].set(xlim=[fmin, fmax], ylim=[-0.2, 1])
+
+            # Show band limits
+            for f in [8, 13, 30, 100]:
+                axes[i, j].axvline(f, color="k")
+                axes[j, i].axvline(f, color="k")
+            # Show line-noise
+            axes[j, i].axvspan(
+                58.5,
+                61.5,
+                color="k",
+                alpha=0.3,
+            )
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_and_save(
+    avg_con, plot_func, method, Freq_Bands, roi_names, group, condition, output_dir
+):
+    """
+    Creates and saves plots for each combination of group, condition, and method in avg_results.
+
+    Parameters:
+    - avg_con: The  averaged connectivity matrix.
+    - plot_func: The function to use for creating the plot.
+    - output_dir: The directory where the plots should be saved.
+    """
+
+    # Create a new figure for this plot
+    plt.figure()
+
+    # Create the plot using the provided function
+    plot_func(avg_con, method, Freq_Bands, roi_names)
+
+    # Set the title of the plot to indicate the group, condition, and method
+    plt.title(f"Group: {group}, Condition: {condition}, Method: {method}")
+
+    # Save the figure
+    # The filename is created from the group, condition, and method to ensure it's unique
+    filename = f"{func_name}_{group}_{condition}_{method}.png"
+    plt.savefig(os.path.join(output_dir, filename))
+
+    # Close the figure to free up memory
+    plt.close()
 
 
 def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, foi):
