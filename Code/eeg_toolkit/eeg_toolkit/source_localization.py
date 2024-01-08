@@ -109,12 +109,12 @@ def apply_inverse_and_save(
     sub_id_if_nan = None
     if isinstance(mne_object, mne.io.fiff.raw.Raw):
         print("Applying inverse to Raw object")
-        stc = mne.minimum_norm.apply_inverse_and_save_raw(
+        stc = mne.minimum_norm.apply_inverse_raw(
             mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
         )
     elif isinstance(mne_object, mne.epochs.EpochsArray):
         print("Applying inverse to Epochs object")
-        stc = mne.minimum_norm.apply_inverse_and_save_epochs(
+        stc = mne.minimum_norm.apply_inverse_epochs(
             mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
         )
     else:
