@@ -133,7 +133,7 @@ def compute_connectivity_epochs(
             fmin=fmin,
             fmax=fmax,
             mt_adaptive=True,
-            n_jobs=1,
+            n_jobs=-1,
         )
         plot_con_freqx(con_epochs, roi_names)
     else:
@@ -178,6 +178,168 @@ def compute_connectivity_resting_state(
             n_jobs=1,
         )
         con_matrices[(band, method)] = con
+
+
+def compute_sub_avg_con(
+    sub_ids_CP,
+    sub_ids_HC,
+    processed_data_path,
+    zscored_epochs_data_path,
+    EO_resting_data_path,
+    EC_resting_data_path,
+    connectivity_methods,
+    conditions,
+    roi_names,
+    Freq_Bands,
+    tmin,
+    tmax,
+    sfreq,
+):
+    """
+    Compute the average connectivity for each subject in two groups.
+
+    Parameters:
+    - sub_ids_CP: A list of subject IDs in the CP group.
+    - sub_ids_HC: A list of subject IDs in the HC group.
+    - processed_data_path: The path to the processed data.
+    - zscored_epochs_data_path: The path to the z-scored epochs data.
+    - EO_resting_data_path: The path to the resting state data with eyes open.
+    - EC_resting_data_path: The path to the resting state data with eyes closed.
+    - connectivity_methods: A list of connectivity methods to compute.
+    - roi_names: A list of ROI names.
+    - Freq_Bands: A list of frequency bands.
+    - tmin: The starting time of the epochs.
+    - tmax: The ending time of the epochs.
+    - sfreq: The sampling frequency.
+
+    Returns:
+    - results: A dictionary containing the computed connectivity results for each subject and condition.
+    """
+    # Initialize dictionary to store results
+    results = {}
+
+    for group in [tuple(sub_ids_CP), tuple(sub_ids_HC)]:
+        # initialize dictionary for this group
+        results[group] = {}
+        for sub_id in sub_ids_CP:
+            # Initialize dictionary for this subject
+            results[group][sub_id] = {}
+
+            # First load in STC data and separate epochs by stimulus
+            # Epochs
+            (
+                hand_all_label_ts,
+                back_all_label_ts,
+                hand_all_ratings,
+                back_all_ratings,
+            ) = separate_epochs_by_stim(
+                sub_id, processed_data_path, zscored_epochs_data_path
+            )
+            # Resting state
+            # label_ts_EO = utils.unpickle_data(
+            #     EO_resting_data_path, f"{sub_id}_EO.pkl"
+            # )
+            # label_ts_EC = utils.unpickle_data(
+            #     EC_resting_data_path, f"{sub_id}_EC.pkl"
+            # )
+
+            # Unpack label_ts for each site and stimulus level
+            label_ts_all = []
+            label_ts_all.extend(list(hand_all_label_ts))
+            label_ts_all.extend(list(back_all_label_ts))
+            # label_ts_all.extend([label_ts_EO, label_ts_EC])
+
+            # Compute connectivity for epochs
+            for method in connectivity_methods:
+                for label_ts, condition in zip(label_ts_all, conditions):
+                    if isinstance(label_ts, list):
+                        con_epochs = compute_connectivity_epochs(
+                            label_ts, roi_names, method, Freq_Bands, tmin, tmax, sfreq
+                        )
+
+                        # average epochs within subject first
+                        con_epochs_mean = np.mean(con_epochs.get_data(), axis=1)
+
+                        # Add result to dictionary
+                        if condition not in results[group][sub_id]:
+                            results[group][sub_id][condition] = {}
+                        results[group][sub_id][condition][method] = con_epochs_mean
+                    else:
+                        con_eo = compute_connectivity_resting_state(
+                            label_ts,
+                            roi_names,
+                            method,
+                            Freq_Bands,
+                            sfreq,
+                            condition="EO",
+                        )
+                        con_ec = compute_connectivity_resting_state(
+                            label_ts,
+                            roi_names,
+                            method,
+                            Freq_Bands,
+                            sfreq,
+                            condition="EC",
+                        )
+
+                        # Add result to dictionary
+                        if "Eyes Open" not in results[group][sub_id]:
+                            results[group][sub_id]["Eyes Open"] = {}
+                        results[group][sub_id]["Eyes Open"][method] = con_eo
+
+                        if "Eyes Closed" not in results[group][sub_id]:
+                            results[group][sub_id]["Eyes Closed"] = {}
+                        results[group][sub_id]["Eyes Closed"][method] = con_ec
+
+    return results
+
+
+def compute_group_avg_con(results, fc_path, Freq_Bands, roi_names):
+    """
+    Computes the average results for each group, condition, and method based on the given results.
+
+    Args:
+        results (dict): A dictionary containing the results for each group, condition, method, and subject.
+        fc_path (str): The path to the file containing the frequency bands.
+        Freq_Bands (list): A list of frequency bands.
+        roi_names (list): A list of ROI names.
+
+    Returns:
+        dict: A dictionary containing the average results for each group, condition, and method.
+    """
+    # Initialize dictionary to store average results
+    avg_results = {}
+
+    # Loop through each group
+    for group in results.keys():
+        avg_results[group] = {}
+
+        # Loop through each condition
+        for condition in results[group][next(iter(results[group]))].keys():
+            avg_results[group][condition] = {}
+
+            # Loop through each method
+            for method in results[group][next(iter(results[group]))][condition].keys():
+                # Initialize list to store all subjects' data for this group, condition, and method
+                all_subjects_data = []
+
+                # Loop through each subject
+                for sub_id in results[group].keys():
+                    # Append this subject's data to the list
+                    all_subjects_data.append(results[group][sub_id][condition][method])
+
+                # Convert list to numpy array
+                all_subjects_data = np.array(all_subjects_data)
+
+                # Compute mean across all subjects and store in avg_results
+                avg_results[group][condition][method] = np.mean(
+                    all_subjects_data, axis=0
+                )
+
+                avg_result_current = avg_results[group][condition][method]
+                print(avg_result_current)
+                # Plot averaged data and save
+    return avg_results
 
 
 def plot_con_freqx(con_epochs, roi_names):
@@ -250,10 +412,14 @@ def plot_and_save(
     plt.close()
 
 
-def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, foi):
+def plot_con_matrix(
+    con_data, n_connectivity_methods, connectivity_methods, roi_names, foi
+):
     """Visualize the connectivity matrix."""
-    fig, ax = plt.subplots(1, n_con_methods, figsize=(6 * n_con_methods, 6))
-    for c in range(n_con_methods):
+    fig, ax = plt.subplots(
+        1, n_connectivity_methods, figsize=(6 * n_connectivity_methods, 6)
+    )
+    for c in range(n_connectivity_methods):
         # Plot with imshow
         con_plot = ax[c].imshow(con_data[c, :, :, foi], cmap="binary", vmin=0, vmax=1)
         # Set title
@@ -272,7 +438,7 @@ def plot_con_matrix(con_data, n_con_methods, connectivity_methods, roi_names, fo
     return fig
 
 
-def plot_connectivity(con_epochs, t_con_max, roi_names, con_methods):
+def plot_connectivity(con_epochs, t_con_max, roi_names, connectivity_methods):
     for c in range(len(con_epochs)):
         # Plot the connectivity matrix at the timepoint with highest global wPLI
         con_epochs_matrix = con_epochs[c].get_data(output="dense")[:, :, 0, t_con_max]
@@ -290,12 +456,12 @@ def plot_connectivity(con_epochs, t_con_max, roi_names, con_methods):
         ax.set_xticks(range(len(roi_names)))
         ax.set_xticklabels(roi_names, rotation=45)
 
-        ax.set_title(f"{con_methods[c]} Connectivity")
+        ax.set_title(f"{connectivity_methods[c]} Connectivity")
 
         plt.show()
 
 
-def plot_connectivity_circle(con_matrices, con_methods, Freq_Bands, roi_names):
+def plot_connectivity_circle(con_matrices, connectivity_methods, Freq_Bands, roi_names):
     for (band, method), con in con_matrices.items():
         plt.figure(figsize=(10, 8))
         mne.viz.plot_connectivity_circle(
