@@ -283,13 +283,21 @@ def compute_sub_avg_con(
                         tmax,
                         sfreq,
                     )
-                    # average epochs across the frequency band
+                    # average points across each frequency band
                     con_band_averaged = np.mean(con.get_data(), axis=1)
+                    con_band_averaged = con_band_averaged.reshape(
+                        len(roi_names), len(roi_names)
+                    )
 
                 else:
                     # Compute connectivity for resting state
                     con = compute_connectivity_resting_state(
                         label_ts, roi_names, method, Freq_Bands, sfreq, condition
+                    )
+                    # average points across each frequency band
+                    con_band_averaged = np.mean(con.get_data(), axis=1)
+                    con_band_averaged = con_band_averaged.reshape(
+                        len(roi_names), len(roi_names)
                     )
 
                 print(f"*con_band_averaged shape = {con_band_averaged.shape}*")
