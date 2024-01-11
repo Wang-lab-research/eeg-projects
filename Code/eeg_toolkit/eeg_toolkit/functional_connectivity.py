@@ -392,10 +392,9 @@ def plot_and_save(
     plt.close()
 
 
-def plot_con_matrix(
-    con_data, n_connectivity_methods, connectivity_methods, roi_names, foi
-):
+def plot_con_matrix(con_data, connectivity_methods, roi_names, foi):
     """Visualize the connectivity matrix."""
+    n_connectivity_methods = len(connectivity_methods)
     fig, ax = plt.subplots(
         1, n_connectivity_methods, figsize=(6 * n_connectivity_methods, 6)
     )
