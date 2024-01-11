@@ -363,7 +363,7 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 
 
 def plot_and_save(
-    avg_con, plot_func, method, Freq_Bands, roi_names, group, condition, output_dir
+    con_data, plot_func, method, band, roi_names, group, condition, save_path
 ):
     """
     Creates and saves plots for each combination of group, condition, and method in avg_results.
@@ -374,117 +374,98 @@ def plot_and_save(
     - output_dir: The directory where the plots should be saved.
     """
 
-    # Create a new figure for this plot
-    plt.figure()
-
     # Create the plot using the provided function
-    plot_func(avg_con, method, Freq_Bands, roi_names)
-
-    # Set the title of the plot to indicate the group, condition, and method
-    plt.title(f"Group: {group}, Condition: {condition}, Method: {method}")
+    func_name = plot_func(con_data, method, band, roi_names, group, condition)
 
     # Save the figure
     # The filename is created from the group, condition, and method to ensure it's unique
-    filename = f"{func_name}_{group}_{condition}_{method}.png"
-    plt.savefig(os.path.join(output_dir, filename))
+    filename = f"{func_name}_{group}_{condition}_{band}{method}.png"
+    plt.savefig(os.path.join(save_path, filename))
 
     # Close the figure to free up memory
     plt.close()
 
 
-def plot_con_matrix(con_data, connectivity_methods, roi_names, foi):
-    """Visualize the connectivity matrix."""
-    n_connectivity_methods = len(connectivity_methods)
-    fig, ax = plt.subplots(
-        1, n_connectivity_methods, figsize=(6 * n_connectivity_methods, 6)
+def plot_connectivity(
+    con_data,
+    method,
+    band,
+    roi_names,
+    group,
+    condition,
+):
+    fig, ax = plt.subplots()
+
+    im = ax.imshow(con_data)
+    fig.colorbar(im, ax=ax, label="Connectivity")
+
+    ax.set_ylabel("Regions")
+    ax.set_yticks(range(len(roi_names)))
+    ax.set_yticklabels(roi_names)
+
+    ax.set_xlabel("Regions")
+    ax.set_xticks(range(len(roi_names)))
+    ax.set_xticklabels(roi_names, rotation=45)
+
+    ax.set_title(
+        f"Connectivity of {group} Group {condition} condition in {band} band ({method} method)"
     )
-    for c in range(n_connectivity_methods):
-        # Plot with imshow
-        con_plot = ax[c].imshow(con_data[c, :, :, foi], cmap="binary", vmin=0, vmax=1)
-        # Set title
-        ax[c].set_title(connectivity_methods[c])
-        # Add colorbar
-        fig.colorbar(con_plot, ax=ax[c], shrink=0.7, label="Connectivity")
-        # Fix labels
-        ax[c].set_xticks(range(len(roi_names)))
-        ax[c].set_xticklabels(roi_names)
-        ax[c].set_yticks(range(len(roi_names)))
-        ax[c].set_yticklabels(roi_names)
-        print(
-            f"Connectivity method: {connectivity_methods[c]}\n"
-            + f"{con_data[c,:,:,foi]}"
-        )
-    return fig
+
+    plt.show()
+
+    return "connectivity"
 
 
-def plot_connectivity(con_epochs, t_con_max, roi_names, connectivity_methods):
-    for c in range(len(con_epochs)):
-        # Plot the connectivity matrix at the timepoint with highest global wPLI
-        con_epochs_matrix = con_epochs[c].get_data(output="dense")[:, :, 0, t_con_max]
+def plot_connectivity_circle(con_data, method, band, roi_names, group, condition):
+    plt.figure(figsize=(10, 8))
+    mne.viz.plot_connectivity_circle(
+        con_data,
+        roi_names,
+        title=f"{condition.upper()} Condition {band.upper()} {method.upper()} Connectivity",
+        facecolor="white",
+        textcolor="black",
+        node_edgecolor="black",
+        fontsize_names=8,
+    )
+    plt.set_title(
+        f"Connectivity of {group} Group {condition} condition in {band} band ({method} method)"
+    )
 
-        fig, ax = plt.subplots()
+    plt.show()
 
-        im = ax.imshow(con_epochs_matrix)
-        fig.colorbar(im, ax=ax, label="Connectivity")
-
-        ax.set_ylabel("Regions")
-        ax.set_yticks(range(len(roi_names)))
-        ax.set_yticklabels(roi_names)
-
-        ax.set_xlabel("Regions")
-        ax.set_xticks(range(len(roi_names)))
-        ax.set_xticklabels(roi_names, rotation=45)
-
-        ax.set_title(f"{connectivity_methods[c]} Connectivity")
-
-        plt.show()
+    return "connectivity_circle"
 
 
-def plot_connectivity_circle(con_matrices, connectivity_methods, Freq_Bands, roi_names):
-    for (band, method), con in con_matrices.items():
-        plt.figure(figsize=(10, 8))
-        mne.viz.plot_connectivity_circle(
-            con,
-            roi_names,
-            title=f"{condition.upper()} Condition {band.upper()} {method.upper()} Connectivity",
-            facecolor="white",
-            textcolor="black",
-            node_edgecolor="black",
-            fontsize_names=8,
-        )
-        plt.show()
+# def plot_global_connectivity(epochs, tmin, tmax, n_connections, con_epochs, Freq_Bands):
+#     """
+#     Plot the global connectivity over time.
 
+#     Args:
+#         epochs (Epochs): The epochs data.
+#         tmin (float): The minimum time value to include in the plot.
+#         tmax (float): The maximum time value to include in the plot.
+#         n_connections (int): The number of connections.
+#         con_epochs (list): The connectivity epochs.
+#         Freq_Bands (dict): The frequency bands.
+#     """
 
-def plot_global_connectivity(epochs, tmin, tmax, n_connections, con_epochs, Freq_Bands):
-    """
-    Plot the global connectivity over time.
+#     # Get the timepoints within the specified time range
+#     times = epochs.times[(epochs.times >= tmin) & (epochs.times <= tmax)]
 
-    Args:
-        epochs (Epochs): The epochs data.
-        tmin (float): The minimum time value to include in the plot.
-        tmax (float): The maximum time value to include in the plot.
-        n_connections (int): The number of connections.
-        con_epochs (list): The connectivity epochs.
-        Freq_Bands (dict): The frequency bands.
-    """
+#     for c in range(len(con_epochs)):
+#         # Get global average connectivity over all connections
+#         con_epochs_raveled_array = con_epochs[c].get_data(output="raveled")
+#         global_con_epochs = np.sum(con_epochs_raveled_array, axis=0) / n_connections
 
-    # Get the timepoints within the specified time range
-    times = epochs.times[(epochs.times >= tmin) & (epochs.times <= tmax)]
+#         for i, (k, v) in enumerate(Freq_Bands.items()):
+#             global_con_epochs_tmp = global_con_epochs[i]
 
-    for c in range(len(con_epochs)):
-        # Get global average connectivity over all connections
-        con_epochs_raveled_array = con_epochs[c].get_data(output="raveled")
-        global_con_epochs = np.sum(con_epochs_raveled_array, axis=0) / n_connections
+#             # Get the timepoint with the highest global connectivity right after stimulus
+#             t_con_max = np.argmax(global_con_epochs_tmp[times <= tmax])
 
-        for i, (k, v) in enumerate(Freq_Bands.items()):
-            global_con_epochs_tmp = global_con_epochs[i]
-
-            # Get the timepoint with the highest global connectivity right after stimulus
-            t_con_max = np.argmax(global_con_epochs_tmp[times <= tmax])
-
-            # Plot the global connectivity
-            fig = plt.figure()
-            plt.plot(times, global_con_epochs_tmp)
-            plt.xlabel("Time (s)")
-            plt.ylabel(f"Global {k} wPLI over trials")
-            plt.title(f"Global {k} wPLI peaks {times[t_con_max]:.3f}s after stimulus")
+#             # Plot the global connectivity
+#             fig = plt.figure()
+#             plt.plot(times, global_con_epochs_tmp)
+#             plt.xlabel("Time (s)")
+#             plt.ylabel(f"Global {k} wPLI over trials")
+#             plt.title(f"Global {k} wPLI peaks {times[t_con_max]:.3f}s after stimulus")
