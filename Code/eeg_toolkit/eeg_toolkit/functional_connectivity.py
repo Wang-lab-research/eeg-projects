@@ -5,6 +5,7 @@ import scipy.io as sio
 import os
 import numpy as np
 import mne
+from tabulate import tabulate
 
 
 def get_info_by_stim(stim_label, stim_labels, pain_ratings):
@@ -29,7 +30,7 @@ def get_info_by_stim(stim_label, stim_labels, pain_ratings):
 
 # Load in {sub_id}_stim_labels.mat and {sub_id}_pain_ratings.mat} from processed_data_path
 def separate_epochs_by_stim(
-    sub_id, processed_data_path, stc_data_path, pain_thresh=None
+    sub_id, processed_data_path, stc_data_path, include_LS=False, pain_thresh=None
 ):
     """
     Separates epochs by stimulus for a given subject.
@@ -51,14 +52,14 @@ def separate_epochs_by_stim(
     print(f"Reading stimulus labels and pain ratings for Subject {sub_id}...")
 
     stim_labels = sio.loadmat(
-        os.path.join(processed_data_path, sub_id + "_stim_labels.mat")
+        os.path.join(processed_data_path, f"{sub_id}_stim_labels.mat")
     )
     stim_labels = stim_labels["stim_labels"].tolist()[0]
     print(f"\n*stim_labels length = {len(stim_labels)}*")
 
     # Load in pain rating for each stimuli
     pain_ratings_raw = sio.loadmat(
-        os.path.join(processed_data_path, sub_id + "_pain_ratings.mat")
+        os.path.join(processed_data_path, f"{sub_id}_pain_ratings.mat")
     )
     pain_ratings_raw = pain_ratings_raw["pain_ratings"].tolist()[0]
 
@@ -82,11 +83,9 @@ def separate_epochs_by_stim(
     # Identify trial indices
 
     hand_NS_labels, hand_NS_ratings = get_info_by_stim(5, stim_labels, pain_ratings)
-    hand_LS_labels, hand_LS_ratings = get_info_by_stim(4, stim_labels, pain_ratings)
     hand_HS_labels, hand_HS_ratings = get_info_by_stim(3, stim_labels, pain_ratings)
 
     back_NS_labels, back_NS_ratings = get_info_by_stim(8, stim_labels, pain_ratings)
-    back_LS_labels, back_LS_ratings = get_info_by_stim(7, stim_labels, pain_ratings)
     back_HS_labels, back_HS_ratings = get_info_by_stim(6, stim_labels, pain_ratings)
 
     ##############################################################################################
@@ -94,20 +93,43 @@ def separate_epochs_by_stim(
 
     label_ts = utils.unpickle_data(stc_data_path / f"{sub_id}_epochs.pkl")
     hand_NS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_NS_labels]
-    hand_LS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_LS_labels]
     hand_HS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_HS_labels]
 
     back_NS_label_ts = [el for i, el in enumerate(label_ts) if i in back_NS_labels]
-    back_LS_label_ts = [el for i, el in enumerate(label_ts) if i in back_LS_labels]
     back_HS_label_ts = [el for i, el in enumerate(label_ts) if i in back_HS_labels]
 
     ##############################################################################################
-    # Return labels and pain ratings
-    hand_all_label_ts = (hand_NS_label_ts, hand_LS_label_ts, hand_HS_label_ts)
-    back_all_label_ts = (back_NS_label_ts, back_LS_label_ts, back_HS_label_ts)
+    # Include LS only if specified
+    if include_LS:
+        hand_LS_labels, hand_LS_ratings = get_info_by_stim(4, stim_labels, pain_ratings)
+        back_LS_labels, back_LS_ratings = get_info_by_stim(7, stim_labels, pain_ratings)
 
-    hand_all_ratings = (hand_NS_ratings, hand_LS_ratings, hand_HS_ratings)
-    back_all_ratings = (back_NS_ratings, back_LS_ratings, back_HS_ratings)
+        hand_LS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_LS_labels]
+        back_LS_label_ts = [el for i, el in enumerate(label_ts) if i in back_LS_labels]
+
+    ##############################################################################################
+    # Return labels and pain ratings
+    hand_all_label_ts = (
+        (hand_NS_label_ts, hand_LS_label_ts, hand_HS_label_ts)
+        if include_LS
+        else (hand_NS_label_ts, hand_HS_label_ts)
+    )
+    back_all_label_ts = (
+        (back_NS_label_ts, back_LS_label_ts, back_HS_label_ts)
+        if include_LS
+        else (back_NS_label_ts, back_HS_label_ts)
+    )
+
+    hand_all_ratings = (
+        (hand_NS_ratings, hand_LS_ratings, hand_HS_ratings)
+        if include_LS
+        else (hand_NS_ratings, hand_HS_ratings)
+    )
+    back_all_ratings = (
+        (back_NS_ratings, back_LS_ratings, back_HS_ratings)
+        if include_LS
+        else (back_NS_ratings, back_HS_ratings)
+    )
 
     return hand_all_label_ts, back_all_label_ts, hand_all_ratings, back_all_ratings
 
@@ -116,73 +138,60 @@ def compute_connectivity_epochs(
     label_ts,
     roi_names,
     method,
-    Freq_Bands,
+    fmin,
+    fmax,
     tmin,
     tmax,
-    sfreq=400,
-    plot_freq_matrix=False,
+    sfreq,
 ):
-    if plot_freq_matrix is True:
-        fmin, fmax = 4, 100
-        # Compute connectivity over trials
-        con_epochs = mne_conn.spectral_connectivity_epochs(
-            label_ts,
-            method=method,
-            mode="multitaper",
-            sfreq=sfreq,
-            fmin=fmin,
-            fmax=fmax,
-            mt_adaptive=True,
-            n_jobs=-1,
-        )
-        plot_con_freqx(con_epochs, roi_names)
-    else:
-        fmins = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
-        fmaxs = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
-
-        for fmin, fmax in zip(fmins, fmaxs):
-            con_epochs = mne_conn.spectral_connectivity_epochs(
-                label_ts,
-                method=method,
-                mode="multitaper",
-                sfreq=sfreq,
-                fmin=fmin,
-                fmax=fmax,
-                mt_adaptive=True,
-                n_jobs=1,
-            )
-    print(con_epochs.shape)
+    con_epochs = mne_conn.spectral_connectivity_epochs(
+        label_ts,
+        method=method,
+        mode="multitaper",
+        sfreq=sfreq,
+        fmin=fmin,
+        fmax=fmax,
+        mt_adaptive=True,
+        n_jobs=1,
+    )
+    print(f"*con_epochs shape = {con_epochs.shape}*")
     return con_epochs
 
 
 def compute_connectivity_resting_state(
-    label_ts, roi_names, method, Freq_Bands, sfreq, condition
+    label_ts,
+    roi_names,
+    method,
+    fmin,
+    fmax,
+    tmin,
+    tmax,
+    sfreq,
 ):
-    con_matrices = {}
-    for band, freq in Freq_Bands.items():
-        (
-            con,
-            freqs,
-            times,
-            n_epochs,
-            n_tapers,
-        ) = mne_conn.spectral_connectivity(
-            raw,
-            method=method,
-            mode="multitaper",
-            sfreq=sfreq,
-            fmin=freq[0],
-            fmax=freq[1],
-            faverage=True,
-            mt_adaptive=True,
-            n_jobs=1,
-        )
-        con_matrices[(band, method)] = con
+    (
+        con,
+        freqs,
+        times,
+        n_epochs,
+        n_tapers,
+    ) = mne_conn.spectral_connectivity_time(
+        label_ts,
+        method=method,
+        mode="multitaper",
+        sfreq=sfreq,
+        fmin=fmin,
+        fmax=fmax,
+        faverage=True,
+        mt_adaptive=True,
+        n_jobs=1,
+    )
+    print(f"*con shape = {con.shape}*")
+    return con
 
 
 def compute_sub_avg_con(
-    sub_ids_CP,
-    sub_ids_HC,
+    sub_id,
+    group_name,
     processed_data_path,
     zscored_epochs_data_path,
     EO_resting_data_path,
@@ -196,190 +205,153 @@ def compute_sub_avg_con(
     sfreq,
 ):
     """
-    Compute the average connectivity for each subject in two groups.
+    Compute the average connectivity for each subject, group, and condition.
 
-    Parameters:
-    - sub_ids_CP: A list of subject IDs in the CP group.
-    - sub_ids_HC: A list of subject IDs in the HC group.
-    - processed_data_path: The path to the processed data.
-    - zscored_epochs_data_path: The path to the z-scored epochs data.
-    - EO_resting_data_path: The path to the resting state data with eyes open.
-    - EC_resting_data_path: The path to the resting state data with eyes closed.
-    - connectivity_methods: A list of connectivity methods to compute.
-    - roi_names: A list of ROI names.
-    - Freq_Bands: A list of frequency bands.
-    - tmin: The starting time of the epochs.
-    - tmax: The ending time of the epochs.
-    - sfreq: The sampling frequency.
+    Args:
+        sub_id (str): The subject ID.
+        group_name (str): The name of the group.
+        processed_data_path (str): The path to the processed data.
+        zscored_epochs_data_path (str): The path to the z-scored epochs data.
+        EO_resting_data_path (str): The path to the EO resting data.
+        EC_resting_data_path (str): The path to the EC resting data.
+        connectivity_methods (list): List of connectivity methods to compute.
+        conditions (list): List of conditions.
+        roi_names (list): List of regions of interest names.
+        Freq_Bands (dict): Dictionary of frequency bands.
+        tmin (float): The minimum time.
+        tmax (float): The maximum time.
+        sfreq (float): The sampling frequency.
 
     Returns:
-    - results: A dictionary containing the computed connectivity results for each subject and condition.
+        dict: A dictionary containing the connectivity results for each condition, method, and frequency band.
     """
-    # Initialize dictionary to store results
+
+    # Initialize dictionary for this subject
     results = {}
 
-    for group in [tuple(sub_ids_CP), tuple(sub_ids_HC)]:
-        # initialize dictionary for this group
-        results[group] = {}
-        for sub_id in sub_ids_CP:
-            # Initialize dictionary for this subject
-            results[group][sub_id] = {}
+    # Separate epochs by stimulus
+    (
+        hand_all_label_ts,
+        back_all_label_ts,
+        hand_all_ratings,
+        back_all_ratings,
+    ) = separate_epochs_by_stim(
+        sub_id, processed_data_path, zscored_epochs_data_path, include_LS=False
+    )
 
-            # First load in STC data and separate epochs by stimulus
-            # Epochs
-            (
-                hand_all_label_ts,
-                back_all_label_ts,
-                hand_all_ratings,
-                back_all_ratings,
-            ) = separate_epochs_by_stim(
-                sub_id, processed_data_path, zscored_epochs_data_path
-            )
-            # Resting state
-            # label_ts_EO = utils.unpickle_data(
-            #     EO_resting_data_path, f"{sub_id}_EO.pkl"
-            # )
-            # label_ts_EC = utils.unpickle_data(
-            #     EC_resting_data_path, f"{sub_id}_EC.pkl"
-            # )
+    # Resting state
+    # label_ts_EO = utils.unpickle_data(
+    #     EO_resting_data_path, f"{sub_id}_EO.pkl"
+    # )
+    # label_ts_EC = utils.unpickle_data(
+    #     EC_resting_data_path, f"{sub_id}_EC.pkl"
+    # )
 
-            # Unpack label_ts for each site and stimulus level
-            label_ts_all = []
-            label_ts_all.extend(list(hand_all_label_ts))
-            label_ts_all.extend(list(back_all_label_ts))
-            # label_ts_all.extend([label_ts_EO, label_ts_EC])
+    # Unpack label_ts for each site and stimulus level
+    label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
+    # label_ts_all.extend([label_ts_EO, label_ts_EC])
 
-            # Compute connectivity for epochs
-            for method in connectivity_methods:
-                for label_ts, condition in zip(label_ts_all, conditions):
-                    if isinstance(label_ts, list):
-                        con_epochs = compute_connectivity_epochs(
-                            label_ts, roi_names, method, Freq_Bands, tmin, tmax, sfreq
-                        )
+    # Get the frequency bands
+    fmins = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
+    fmaxs = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
+    fmins = [Freq_Bands[f][0] for f in Freq_Bands]
+    fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
-                        # average epochs within subject first
-                        con_epochs_mean = np.mean(con_epochs.get_data(), axis=1)
+    # Compute connectivity for epochs
+    for method in connectivity_methods:
+        for label_ts, condition in zip(label_ts_all, conditions):
+            num_epochs = len(label_ts)
+            if num_epochs == 0:
+                continue
+            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_Bands):
+                table = [
+                    ["Subject", sub_id],
+                    ["Condition", condition],
+                    ["Num. of epochs", len(label_ts)],
+                    ["Band", band_name],
+                    ["Method", method],
+                ]
+                print(tabulate(table, tablefmt="grid"))
+                if isinstance(label_ts, list):
+                    con = compute_connectivity_epochs(
+                        label_ts,
+                        roi_names,
+                        method,
+                        fmin,
+                        fmax,
+                        tmin,
+                        tmax,
+                        sfreq,
+                    )
+                    # average epochs across the frequency band
+                    con_band_averaged = np.mean(con.get_data(), axis=1)
 
-                        # Add result to dictionary
-                        if condition not in results[group][sub_id]:
-                            results[group][sub_id][condition] = {}
-                        results[group][sub_id][condition][method] = con_epochs_mean
-                    else:
-                        con_eo = compute_connectivity_resting_state(
-                            label_ts,
-                            roi_names,
-                            method,
-                            Freq_Bands,
-                            sfreq,
-                            condition="EO",
-                        )
-                        con_ec = compute_connectivity_resting_state(
-                            label_ts,
-                            roi_names,
-                            method,
-                            Freq_Bands,
-                            sfreq,
-                            condition="EC",
-                        )
+                else:
+                    # Compute connectivity for resting state
+                    con = compute_connectivity_resting_state(
+                        label_ts, roi_names, method, Freq_Bands, sfreq, condition
+                    )
 
-                        # Add result to dictionary
-                        if "Eyes Open" not in results[group][sub_id]:
-                            results[group][sub_id]["Eyes Open"] = {}
-                        results[group][sub_id]["Eyes Open"][method] = con_eo
+                print(f"*con_band_averaged shape = {con_band_averaged.shape}*")
 
-                        if "Eyes Closed" not in results[group][sub_id]:
-                            results[group][sub_id]["Eyes Closed"] = {}
-                        results[group][sub_id]["Eyes Closed"][method] = con_ec
-
+                # Add result to dictionary
+                if condition not in results:
+                    results[condition] = {}
+                if "num_epochs" not in results[condition]:
+                    results[condition]["num_epochs"] = num_epochs
+                if method not in results[condition]:
+                    results[condition][method] = {}
+                results[condition][method][band_name] = con_band_averaged
     return results
 
 
-def compute_group_avg_con(results, fc_path, Freq_Bands, roi_names):
+def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     """
-    Computes the average results for each group, condition, and method based on the given results.
+    Compute the average connectivity for all subjects in each group, condition, method, and band.
 
     Args:
-        results (dict): A dictionary containing the results for each group, condition, method, and subject.
-        fc_path (str): The path to the file containing the frequency bands.
-        Freq_Bands (list): A list of frequency bands.
-        roi_names (list): A list of ROI names.
+        sub_con_dict (dict): The dictionary containing the connectivity results for each subject.
 
     Returns:
-        dict: A dictionary containing the average results for each group, condition, and method.
+        dict: A dictionary containing the average connectivity results for each group, condition, method, and band.
     """
-    # Initialize dictionary to store average results
-    avg_results = {}
 
-    # Loop through each group
-    for group in results.keys():
-        avg_results[group] = {}
+    # Initialize dictionary for the averages
+    avg_dict = {}
 
-        # Loop through each condition
-        for condition in results[group][next(iter(results[group]))].keys():
-            avg_results[group][condition] = {}
+    # Get the list of subjects
+    subjects = list(sub_con_dict.keys())
 
-            # Loop through each method
-            for method in results[group][next(iter(results[group]))][condition].keys():
-                # Initialize list to store all subjects' data for this group, condition, and method
-                all_subjects_data = []
-
-                # Loop through each subject
-                for sub_id in results[group].keys():
-                    # Append this subject's data to the list
-                    all_subjects_data.append(results[group][sub_id][condition][method])
-
-                # Convert list to numpy array
-                all_subjects_data = np.array(all_subjects_data)
-
-                # Compute mean across all subjects and store in avg_results
-                avg_results[group][condition][method] = np.mean(
-                    all_subjects_data, axis=0
+    # Iterate over all conditions, methods, and band names
+    for condition in conditions:
+        for method in con_methods:
+            for band in band_names:
+                # Compute the average for all subjects
+                avg = np.mean(
+                    [
+                        sub_con_dict[subject][condition][method][band]
+                        for subject in subjects
+                    ],
+                    axis=0,
+                )
+                # Sum the number of epochs in each condition
+                num_epochs = np.sum(
+                    [
+                        sub_con_dict[subject][condition]["num_epochs"]
+                        for subject in subjects
+                    ]
                 )
 
-                avg_result_current = avg_results[group][condition][method]
-                print(avg_result_current)
-                # Plot averaged data and save
-    return avg_results
+                # Add result to dictionary
+                if condition not in avg_dict:
+                    avg_dict[condition] = {}
+                if "num_epochs" not in avg_dict[condition]:
+                    avg_dict[condition]["num_epochs"] = num_epochs
+                if method not in avg_dict[condition]:
+                    avg_dict[condition][method] = {}
+                avg_dict[condition][method][band] = avg
 
-
-def plot_con_freqx(con_epochs, roi_names):
-    freqs = con_epochs.freqs
-    fmin, fmax = 4, 100
-    n_rows, n_cols = con_epochs.get_data(output="dense").shape[:2]
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(30, 20), sharex=True, sharey=True)
-    plt.subplots_adjust(wspace=0, hspace=0)
-    for i in range(n_rows):
-        for j in range(i + 1):
-            if i == j:
-                axes[i, j].set_axis_off()
-                continue
-
-            # get data
-            con_data = con_epochs.get_data(output="dense")[i, j, :]
-            axes[i, j].plot(freqs, con_data)
-            axes[j, i].plot(freqs, con_data)
-
-            if j == 0:
-                axes[i, j].set_ylabel(roi_names[i])
-                axes[0, i].set_title(roi_names[i])
-            if i == (n_rows - 1):
-                axes[i, j].set_xlabel(roi_names[j])
-            axes[i, j].set(xlim=[fmin, fmax], ylim=[-0.2, 1])
-            axes[j, i].set(xlim=[fmin, fmax], ylim=[-0.2, 1])
-
-            # Show band limits
-            for f in [8, 13, 30, 100]:
-                axes[i, j].axvline(f, color="k")
-                axes[j, i].axvline(f, color="k")
-            # Show line-noise
-            axes[j, i].axvspan(
-                58.5,
-                61.5,
-                color="k",
-                alpha=0.3,
-            )
-    plt.tight_layout()
-    plt.show()
+    return avg_dict
 
 
 def plot_and_save(
