@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import scipy.io as sio
 import os
 import numpy as np
-import mne
 from tabulate import tabulate
 
 
@@ -362,7 +361,9 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     return avg_dict
 
 
-plt.rcParams['font.size'] = 21
+plt.rcParams["font.size"] = 21
+
+
 def plot_connectivity(
     con_data,
     method,
@@ -377,10 +378,10 @@ def plot_connectivity(
     im = plt.imshow(con_data)
     plt.colorbar(im, label="Connectivity")
 
-    plt.ylabel("Regions",labelpad=20)
+    plt.ylabel("Regions", labelpad=20)
     plt.yticks(range(len(roi_names)), labels=roi_names)
 
-    plt.xlabel("Regions",labelpad=20)
+    plt.xlabel("Regions", labelpad=20)
     plt.xticks(range(len(roi_names)), labels=roi_names, rotation=90)
 
     plt.title(
@@ -394,17 +395,14 @@ def plot_connectivity_circle(
     con_data, method, band, roi_names, group_name, condition, num_epochs
 ):
     plt.figure(figsize=(10, 8))
-    mne.viz.plot_connectivity_circle(
+    mne_conn.viz.plot_connectivity_circle(
         con_data,
         roi_names,
-        title=f"{condition.upper()} Condition {band.upper()} {method.upper()} Connectivity",
+        title=f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)",
         facecolor="white",
         textcolor="black",
         node_edgecolor="black",
         fontsize_names=8,
-    )
-    plt.set_title(
-        f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
     )
 
     plt.show()
