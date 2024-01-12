@@ -85,7 +85,9 @@ def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path):
             *raw.fif file with recording for eyes open only (e.g. 007_eyes_open-raw.fif)
     """
     timestamp_csv = load_csv(sub_id, csv_path)
-    if timestamp_csv is None: return None
+    if timestamp_csv is None: 
+        print(f"No CSV for {sub_id} found, no cropped recordings created")
+        return None
 
     EC_start, EC_stop, EO_start, EO_stop = timestamp_csv['Seconds'][0:4]
     
@@ -112,9 +114,7 @@ def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path):
     
     # Send message if eyes closed is shorter than 3 mins, otherwise default is 3 min eyes closed recording
     if (EC_stop - EC_start) < 180:
-        print(f"Eyes closed is not longer than 3 mins. Length of EC reading is: {EC_stop- EC_start} seconds. Thanks!")
-        print(f"Eyes open after cropping is: {cropped_EO_start} and {cropped_EO_stop}, for a total duration of {cropped_EO_stop - cropped_EO_start}")
-        print(f"Noise reading after cropping is: {EO_start} and {noise_stop}, for a total duration of {noise_stop - EO_start}")
+        print(f"Eyes closed is not longer than 3 mins. Length of EC reading is: {EC_stop- EC_start} seconds.")
     else:
         EC_stop = EC_start + 180
     
