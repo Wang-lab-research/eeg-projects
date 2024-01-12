@@ -362,6 +362,7 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     return avg_dict
 
 
+plt.rcParams['font.size'] = 21
 def plot_connectivity(
     con_data,
     method,
@@ -371,24 +372,23 @@ def plot_connectivity(
     condition,
     num_epochs,
 ):
-    fig, ax = plt.subplots()
+    plt.figure(figsize=(20, 10))
 
-    im = ax.imshow(con_data)
-    fig.colorbar(im, ax=ax, label="Connectivity")
+    im = plt.imshow(con_data)
+    plt.colorbar(im, label="Connectivity")
 
-    ax.set_ylabel("Regions")
-    ax.set_yticks(range(len(roi_names)))
-    ax.set_yticklabels(roi_names)
+    plt.ylabel("Regions",labelpad=20)
+    plt.yticks(range(len(roi_names)), labels=roi_names)
 
-    ax.set_xlabel("Regions")
-    ax.set_xticks(range(len(roi_names)))
-    ax.set_xticklabels(roi_names, rotation=45)
+    plt.xlabel("Regions",labelpad=20)
+    plt.xticks(range(len(roi_names)), labels=roi_names, rotation=90)
 
-    ax.set_title(
+    plt.title(
         f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
     )
 
     plt.show()
+
 
 def plot_connectivity_circle(
     con_data, method, band, roi_names, group_name, condition, num_epochs
@@ -408,6 +408,7 @@ def plot_connectivity_circle(
     )
 
     plt.show()
+
 
 def plot_and_save(
     con_data,
