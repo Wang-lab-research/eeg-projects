@@ -362,37 +362,14 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     return avg_dict
 
 
-def plot_and_save(
-    con_data, plot_func, method, band, roi_names, group, condition, save_path
-):
-    """
-    Creates and saves plots for each combination of group, condition, and method in avg_results.
-
-    Parameters:
-    - avg_con: The  averaged connectivity matrix.
-    - plot_func: The function to use for creating the plot.
-    - output_dir: The directory where the plots should be saved.
-    """
-
-    # Create the plot using the provided function
-    func_name = plot_func(con_data, method, band, roi_names, group, condition)
-
-    # Save the figure
-    # The filename is created from the group, condition, and method to ensure it's unique
-    filename = f"{func_name}_{group}_{condition}_{band}{method}.png"
-    plt.savefig(os.path.join(save_path, filename))
-
-    # Close the figure to free up memory
-    plt.close()
-
-
 def plot_connectivity(
     con_data,
     method,
     band,
     roi_names,
-    group,
+    group_name,
     condition,
+    num_epochs,
 ):
     fig, ax = plt.subplots()
 
@@ -408,15 +385,14 @@ def plot_connectivity(
     ax.set_xticklabels(roi_names, rotation=45)
 
     ax.set_title(
-        f"Connectivity of {group} Group {condition} condition in {band} band ({method} method)"
+        f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
     )
 
     plt.show()
 
-    return "connectivity"
-
-
-def plot_connectivity_circle(con_data, method, band, roi_names, group, condition):
+def plot_connectivity_circle(
+    con_data, method, band, roi_names, group_name, condition, num_epochs
+):
     plt.figure(figsize=(10, 8))
     mne.viz.plot_connectivity_circle(
         con_data,
@@ -428,12 +404,38 @@ def plot_connectivity_circle(con_data, method, band, roi_names, group, condition
         fontsize_names=8,
     )
     plt.set_title(
-        f"Connectivity of {group} Group {condition} condition in {band} band ({method} method)"
+        f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
     )
 
     plt.show()
 
-    return "connectivity_circle"
+def plot_and_save(
+    con_data,
+    method,
+    band,
+    roi_names,
+    group_name,
+    condition,
+    num_epochs,
+    plot_funcs,
+    save_path,
+):
+    """
+    Creates and saves plots for each combination of group, condition, and method in avg_results.
+
+    Parameters:
+    - avg_con: The  averaged connectivity matrix.
+    - plot_func: The function to use for creating the plot.
+    - output_dir: The directory where the plots should be saved.
+    """
+
+    # Create the plot using the provided function and save
+    for plot_func, func_name in zip(plot_funcs, ["conn", "circle"]):
+        plot_func(con_data, method, band, roi_names, group_name, condition, num_epochs)
+        filename = f"{func_name}_{group_name}_{condition}_{band}_{method}.png"
+        plt.savefig(os.path.join(save_path, filename))
+
+        plt.close()
 
 
 # def plot_global_connectivity(epochs, tmin, tmax, n_connections, con_epochs, Freq_Bands):
