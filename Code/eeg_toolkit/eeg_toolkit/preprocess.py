@@ -5,7 +5,6 @@ import mne
 import os
 import mne
 import pandas as pd
-from .utils import *
 from mne.preprocessing import ICA
 from pyprep.find_noisy_channels import NoisyChannels
 from autoreject import AutoReject
