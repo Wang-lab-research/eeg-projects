@@ -23,3 +23,6 @@ gh*
 
 # Ignore irrelevant folders
 My*/
+
+# Ignore vscode workspace
+George Kenefati.code-workspace
