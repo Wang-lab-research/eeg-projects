@@ -239,8 +239,10 @@ def compute_sub_avg_con(
     )
 
     # Resting state
-    label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_EO.pkl")
-    label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_EC.pkl")
+    EO_filepath = os.path.join(EO_resting_data_path,f"{sub_id}_eyes_open.pkl")
+    EC_filepath = os.path.join(EC_resting_data_path,f"{sub_id}_eyes_closed.pkl")
+    label_ts_EO = utils.unpickle_data(EO_filepath)
+    label_ts_EC = utils.unpickle_data(EC_filepath)
 
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
