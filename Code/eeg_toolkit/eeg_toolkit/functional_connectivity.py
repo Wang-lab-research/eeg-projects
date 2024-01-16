@@ -384,8 +384,6 @@ def plot_connectivity(
         f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
     )
 
-    plt.show()
-
 
 def plot_connectivity_circle(
     con_data, method, band, roi_names, group_name, condition, num_epochs
@@ -402,8 +400,6 @@ def plot_connectivity_circle(
         vmin=0.0,
         vmax=1.0,
     )
-
-    plt.show()
 
 
 def plot_and_save(
@@ -431,7 +427,7 @@ def plot_and_save(
         plot_func(con_data, method, band, roi_names, group_name, condition, num_epochs)
         filename = f"{func_name}_{group_name}_{condition}_{band}_{method}.png"
         plt.savefig(os.path.join(save_path, filename))
-
+        plt.show()
         plt.close()
 
 
