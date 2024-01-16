@@ -337,22 +337,20 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
                     ],
                     axis=0,
                 )
-                # Sum the number of epochs in each condition
-                num_epochs = np.sum(
-                    [
-                        sub_con_dict[subject][condition]["num_epochs"]
-                        for subject in subjects
-                    ]
-                )
 
                 # Add result to dictionary
                 if condition not in avg_dict:
                     avg_dict[condition] = {}
-                if "num_epochs" not in avg_dict[condition]:
-                    avg_dict[condition]["num_epochs"] = num_epochs
                 if method not in avg_dict[condition]:
                     avg_dict[condition][method] = {}
                 avg_dict[condition][method][band] = avg
+
+        # Sum the number of epochs in each condition
+        num_epochs = np.sum(
+            [sub_con_dict[subject][condition]["num_epochs"] for subject in subjects]
+        )
+        if "num_epochs" not in avg_dict[condition]:
+            avg_dict[condition]["num_epochs"] = num_epochs
 
     return avg_dict
 
@@ -371,7 +369,7 @@ def plot_connectivity(
 ):
     plt.figure(figsize=(20, 10))
 
-    im = plt.imshow(con_data, vmin=0, vmax=1.0)
+    im = plt.imshow(con_data, vmin=0.0, vmax=1.0)
     plt.colorbar(im, label="Connectivity")
 
     plt.ylabel("Regions", labelpad=20)
@@ -399,6 +397,8 @@ def plot_connectivity_circle(
         textcolor="black",
         node_edgecolor="black",
         fontsize_names=8,
+        vmin=0.0,
+        vmax=1.0,
     )
 
     plt.show()
