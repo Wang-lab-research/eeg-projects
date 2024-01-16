@@ -2,6 +2,10 @@ from .utils import clear_display, set_montage, load_raw_data
 import os
 import numpy as np
 import mne
+import os
+import mne
+import pandas as pd
+from .utils import *
 from mne.preprocessing import ICA
 from pyprep.find_noisy_channels import NoisyChannels
 from autoreject import AutoReject
@@ -59,29 +63,103 @@ def make_sub_time_win_path(
         subpath_zepo = os.path.join(save_path_zepo, sub_id)
         if not os.path.exists(subpath_zepo):  # zepochs
             os.mkdir(subpath_zepo)
-    return subpath_cont, subpath_zepo
+    return subpath_cont,subpath_zepo
 
 
-def to_raw(data_path, sub_id, save_path):
+def load_csv(sub_id, csv_path):
     """
-    Preprocess raw EDF data to filtered FIF format.
+    Function purpose: Obtain the CSV file with timestamps for resting EEG timeframe
+    Inputs: sub_id = subject id of interest
+            csv_path = file path to the folder with the csv
+    Outputs: Corresponding csv file for subject of interest
     """
-    for sub_folder in os.listdir(data_path):
-        if sub_folder.startswith(sub_id):
-            save_fname_fif = sub_id + "_preprocessed-raw.fif"
-            print(sub_id, save_fname_fif)
-            break
+    csv_folder = os.listdir(csv_path)
+    for file in csv_folder:
+        if file.endswith(".csv") and sub_id in file:
+            return pd.read_csv(os.path.join(csv_path, file))
+    print(f"CSV file with {sub_id} not found in the folder.")
+    return None
 
-    eeg_data_raw_file = os.path.join(
-        data_path,
-        sub_folder,
-        next(
-            subfile
-            for subfile in os.listdir(os.path.join(data_path, sub_folder))
-            if (subfile.endswith((".edf", ".EDF")))
-        ),
-    )
 
+def crop_by_resting_times(raw, start, stop, sub_id, save_path, category):
+    """
+    Function purpose: Create cropped files and save them.
+    Inputs: raw = *raw.fif file, start = beginning timepoint in seconds, stop = ending timepoint in seconds
+            save_path = file path to file for saved cropped data
+            category = name for file (eyes_closed, noise, eyes_open)
+    Outputs: cropped file in *raw.fif format
+    """
+    filename = f"{sub_id}_{category}-raw.fif"
+    filepath = os.path.join(save_path, filename)
+    cropped = raw.copy().crop(tmin=start, tmax=stop)
+    cropped.save(filepath, overwrite=True)
+    return cropped
+
+def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path):
+    """
+    Function purpose: Create recording of the full resting EEG
+    Inputs: sub_id = subject ID ie the patient number, 
+            raw = *{sub_id}...raw.fif file
+            csv_path = file path for the folder with the csv with the resting timestamps
+            save_path = file path for saving the recording
+    Outputs: *raw.fif file with recording for eyes closed only (e.g. 007_eyes_closed-raw.fif)
+            *raw.fif file with recording for noise calibration only (e.g. 007_noise-raw.fif)
+            *raw.fif file with recording for eyes open only (e.g. 007_eyes_open-raw.fif)
+    """
+    timestamp_csv = load_csv(sub_id, csv_path)
+    if timestamp_csv is None: 
+        print(f"No CSV for {sub_id} found, no cropped recordings created")
+        return None
+
+    EC_start, EC_stop, EO_start, EO_stop = timestamp_csv['Seconds'][0:4]
+    
+    # Establish timestamps assuming enough recorded for 5 mins of eyes open noise = 2 mins, EO = 3 mins
+    # Case 1: Normal case, EO is at least 5 mins long
+    noise_start = EO_start
+    noise_stop = noise_start + 120
+    cropped_EO_start = noise_stop # Need to reset below
+
+    EO_duration = EO_stop - EO_start
+
+    # Adjust durations based on the length of the recording
+    if EO_duration >= 300: # Resting recording is at least 5 mins
+        noise_stop = EO_start + 120
+    elif EO_duration >= 270: # Resting recording is between 4.5-5 mins
+        noise_stop = EO_start + 90
+    else: # Resting recording is less than 4.5 mins
+        noise_stop = EO_start + 60
+    
+    # Update cropped_EO_start after adjusting noise duration
+    cropped_EO_start = noise_stop
+    
+    cropped_EO_stop = cropped_EO_start + 180  # EO is 3 minutes
+    
+    # Send message if eyes closed is shorter than 3 mins, otherwise default is 3 min eyes closed recording
+    if (EC_stop - EC_start) < 180:
+        print(f"Eyes closed is not longer than 3 mins. Length of EC reading is: {EC_stop- EC_start} seconds.")
+    else:
+        EC_stop = EC_start + 180
+    
+
+    # Crop and save the cropped raw data to a raw.fif file
+    EC_cropped = crop_by_resting_times(raw, EC_start, EC_stop, sub_id, save_path, 'eyes_closed')
+    noise_cropped = crop_by_resting_times(raw, noise_start, noise_stop, sub_id, save_path, 'noise')
+    EO_cropped = crop_by_resting_times(raw, cropped_EO_start, cropped_EO_stop, sub_id, save_path, 'eyes_open')
+
+    return EC_cropped, noise_cropped, EO_cropped
+    
+def to_raw(data_path, sub_id, save_path, csv_path):  
+    """  
+    Preprocess raw EDF data to filtered FIF format.  
+    """  
+    for sub_folder in os.listdir(data_path):  
+        if sub_folder.startswith(sub_id):  
+            save_fname_fif = sub_id + '_preprocessed-raw.fif'  
+            print(sub_id, save_fname_fif)  
+            break  
+    
+    eeg_data_raw_file = os.path.join(data_path, sub_folder, next(subfile for subfile in os.listdir(os.path.join(data_path,sub_folder)) if (subfile.endswith(('.edf', '.EDF')))))  
+    
     # read data, set EOG channel, and drop unused channels
     print(f"{sub_id}\nreading raw file...")
     raw = load_raw_data(eeg_data_raw_file, "eog")
@@ -229,10 +307,13 @@ def to_raw(data_path, sub_id, save_path):
     elif "VEOG" in raw.ch_names:
         raw.drop_channels("VEOG")
     elif Fp1_eog_flag:
-        montage_fname = "../montages/Hydro_Neo_Net_32_xyz_cms_No_Fp1.sfp"
-        set_montage(raw, montage_fname)
+        montage_fname = '../montages/Hydro_Neo_Net_32_xyz_cms_No_Fp1.sfp'
+        set_montage(raw,montage_fname)
 
-    raw.save(save_path + save_fname_fif, verbose=True, overwrite=True)
+    eyes_closed_recording, noise_recording, eyes_open_recording = get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path) #get_cropped_resting_EEGs saves the three resting recordings into same folder as raw
+    
+    raw.save(save_path+save_fname_fif, 
+             verbose=True, overwrite=True)
     clear_display()
 
     # high level inspection
@@ -244,7 +325,7 @@ def to_raw(data_path, sub_id, save_path):
 
     clear_display()
 
-    return raw
+    return raw, eyes_closed_recording, noise_recording, eyes_open_recording 
 
 
 ##############################################
