@@ -236,15 +236,9 @@ def to_source(
 
     # Extract time window information from tuple arguments
     tmin, tmax, bmax = times_tup
-    # TODO: remove hardcoded noise window once generated for each subject
-    rest_min, rest_max = 5.5, 7.5
 
     # Compute noise & data covariance
-    # TODO: replace below with actual noise segment
-    # noise_segment = load_raw(data_path, "noise", sub_id)
-    # raw_eo = load_raw(data_path, sub_id, "EO")
-    raw_eo = load_raw(data_path, sub_id, "preprocessed")
-    noise_segment = raw_eo.crop(tmin=rest_min * 60, tmax=rest_max * 60)
+    noise_segment = load_raw(data_path, sub_id, condition="noise")
     noise_cov = mne.compute_raw_covariance(noise_segment, verbose=True)
     # Regularize the covariance matrices
     noise_cov = mne.cov.regularize(noise_cov, noise_segment.info, eeg=0.1, verbose=True)
@@ -253,12 +247,11 @@ def to_source(
 
     # If processing resting, check directories for count
     if return_EO_resting:
-        # TODO: uncomment when noise_segment completed
-        # raw_eo = load_raw(data_path, sub_id, condition="EO")
-        EO_save_fname = f"{sub_id}_EO.pkl"
+        raw_eo = load_raw(data_path, sub_id, condition="eyes_open")
+        EO_save_fname = f"{sub_id}_eyes_open.pkl"
     if return_EC_resting:
-        raw_ec = load_raw(data_path, sub_id, condition="EC")
-        EC_save_fname = f"{sub_id}_EC.pkl"
+        raw_ec = load_raw(data_path, sub_id, condition="eyes_closed")
+        EC_save_fname = f"{sub_id}_eyes_closed.pkl"
     # If processing epochs, check directory for count
     if return_zepochs:
         zepochs_save_fname = f"{sub_id}_epochs.pkl"
