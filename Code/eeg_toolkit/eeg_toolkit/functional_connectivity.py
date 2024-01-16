@@ -371,7 +371,7 @@ def plot_connectivity(
 ):
     plt.figure(figsize=(20, 10))
 
-    im = plt.imshow(con_data)
+    im = plt.imshow(con_data, vmin=0, vmax=1.0)
     plt.colorbar(im, label="Connectivity")
 
     plt.ylabel("Regions", labelpad=20)
