@@ -312,8 +312,9 @@ def to_raw(data_path, sub_id, save_path, csv_path):
 
     eyes_closed_recording, noise_recording, eyes_open_recording = get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path) #get_cropped_resting_EEGs saves the three resting recordings into same folder as raw
     
-    raw.save(save_path+save_fname_fif, 
-             verbose=True, overwrite=True)
+    # No need to save raw anymore, saving the cropped files instead
+    # raw.save(save_path+save_fname_fif, 
+    #          verbose=True, overwrite=True)
     clear_display()
 
     # high level inspection
