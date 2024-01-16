@@ -239,16 +239,12 @@ def compute_sub_avg_con(
     )
 
     # Resting state
-    # label_ts_EO = utils.unpickle_data(
-    #     EO_resting_data_path, f"{sub_id}_EO.pkl"
-    # )
-    # label_ts_EC = utils.unpickle_data(
-    #     EC_resting_data_path, f"{sub_id}_EC.pkl"
-    # )
+    label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_EO.pkl")
+    label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_EC.pkl")
 
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
-    # label_ts_all.extend([label_ts_EO, label_ts_EC])
+    label_ts_all.extend([label_ts_EO, label_ts_EC])
 
     # Get the frequency bands
     fmins = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
