@@ -980,8 +980,6 @@ def to_epo(raw, sub_id, data_path, save_path):
     # #### **Import stimulus and pain report information for the subject (from excel)**
 
     # import pain ratings to compare to annotations
-    import pandas as pd
-
     for file in os.listdir(data_path):
         if file.startswith(sub_id):
             edf_dir = file
