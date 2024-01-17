@@ -1,10 +1,17 @@
 from eeg_toolkit import utils, preprocess
+import mne
 import mne_connectivity as mne_conn
 import matplotlib.pyplot as plt
 import scipy.io as sio
 import os
 import numpy as np
 from tabulate import tabulate
+
+from mne.datasets import fetch_fsaverage
+
+fs_dir = fetch_fsaverage(verbose=True)
+subject = "fsaverage"
+subjects_dir = os.path.dirname(fs_dir)
 
 
 def get_info_by_stim(stim_label, stim_labels, pain_ratings):
@@ -411,23 +418,70 @@ def plot_connectivity(
 def plot_connectivity_circle(
     con_data, method, band, roi_names, group_name, condition, num_epochs, save_path
 ):
-    # Plot parameters
-    vmin, vmax = 0.0, 1.0
-    fig, ax = plt.subplots(
-        figsize=(8, 8), facecolor="black", subplot_kw=dict(polar=True)
+    # Convert ROI names to labels
+    labels = [
+        mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
+        for roi in roi_names
+    ]
+    # read colors
+    node_colors = [label.color for label in labels]
+
+    # We reorder the labels based on their location in the left hemi
+    label_names = [label.name for label in labels]
+    lh_labels = [name for name in label_names if name.endswith("lh")]
+    rh_labels = [name for name in label_names if name.endswith("rh")]
+
+    # Get the y-location of the label
+    label_ypos_lh = list()
+    for name in lh_labels:
+        idx = label_names.index(name)
+        ypos = np.mean(labels[idx].pos[:, 1])
+        label_ypos_lh.append(ypos)
+    try:
+        idx = label_names.index("Brain-Stem")
+    except ValueError:
+        pass
+    else:
+        ypos = np.mean(labels[idx].pos[:, 1])
+        lh_labels.append("Brain-Stem")
+        label_ypos_lh.append(ypos)
+
+    # Reorder the labels based on their location
+    lh_labels = [label for (yp, label) in sorted(zip(label_ypos_lh, lh_labels))]
+
+    # For the right hemi
+    rh_labels = [
+        label[:-2] + "rh"
+        for label in lh_labels
+        if label != "Brain-Stem" and label[:-2] + "rh" in rh_labels
+    ]
+
+    # Save the plot order
+    node_order = lh_labels[::-1] + rh_labels
+
+    node_angles = mne.viz.circular_layout(
+        label_names,
+        node_order,
+        start_pos=90,
+        group_boundaries=[0, len(label_names) // 2],
     )
 
     # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
     if method == "wpli2_debiased":
         method = "wpli"
 
+    # Plot parameters
+    vmin, vmax = 0.0, 1.0
+    fig, ax = plt.subplots(
+        figsize=(8, 8), facecolor="black", subplot_kw=dict(polar=True)
+    )
+
     mne_conn.viz.plot_connectivity_circle(
         con_data,
         roi_names,
         title=f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)",
-        facecolor="white",
-        textcolor="black",
         node_edgecolor="black",
+        textcolor="white",
         fontsize_names=8,
         vmin=vmin,
         vmax=vmax,
