@@ -168,11 +168,14 @@ def compute_connectivity_resting_state(
     tmax,
     sfreq,
 ):
+    # Change shape of resting state label_ts to 3-d for compatibility
+    data = np.expand_dims(label_ts, axis=0)
+
     # Provide the freq points
     freqs = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
 
     con = mne_conn.spectral_connectivity_time(
-        data=label_ts,
+        data=data,
         freqs=freqs,
         method=method,
         mode="multitaper",
@@ -246,9 +249,6 @@ def compute_sub_avg_con(
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
     label_ts_all.extend([label_ts_EO, label_ts_EC])
-
-    print(label_ts_all[-1].shape)
-    raise ValueError
 
     # Get the frequency bands
     fmins = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
