@@ -404,7 +404,7 @@ def plot_connectivity(
     plt.yticks(range(len(roi_names)), labels=roi_names)
 
     plt.xlabel("Regions", labelpad=20)
-    plt.xticks(range(len(roi_names)), labels=roi_names, rotation=45,ha="right")
+    plt.xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
 
     plt.title(
         f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
@@ -492,7 +492,10 @@ def plot_connectivity_circle(
     fig.tight_layout()
     filename = f"circle_{group_name}_{condition}_{band}_{method}.png"
     fig.savefig(
-        os.path.join(save_path, filename), facecolor=fig.get_facecolor()
+        os.path.join(save_path, filename),
+        facecolor=fig.get_facecolor(),
+        bbox_inches="tight",
+        dpi=300,
     )  # Save the figure
     plt.show()
     plt.close()
