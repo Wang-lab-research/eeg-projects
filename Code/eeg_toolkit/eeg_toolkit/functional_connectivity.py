@@ -388,7 +388,7 @@ def plot_connectivity(
 ):
     # Plot parameters
     vmin, vmax = 0.0, 1.0
-    cmap = "inferno"
+    cmap = "hot"
 
     # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
     if method == "wpli2_debiased":
