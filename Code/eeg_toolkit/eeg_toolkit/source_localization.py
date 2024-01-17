@@ -3,6 +3,7 @@ import os
 import numpy as np
 from mne.datasets import fetch_fsaverage
 import sys
+from scipy.io import savemat
 
 sys.path.append("/home/wanglab/Documents/George Kenefati/Code/eeg_toolkit/")
 from eeg_toolkit import utils  # noqa: E402
@@ -86,6 +87,7 @@ def apply_inverse_and_save(
     sub_id,
     condition,
     average_dipoles=True,
+    save_stc_mat=True,
 ):
     """
     Apply inverse operator to MNE object and save STC files.
@@ -128,6 +130,29 @@ def apply_inverse_and_save(
         # raise ValueError("label_ts contains nan")
 
     utils.pickle_data(save_path, save_fname, label_ts)
+
+    # Save STC as MAT file for analysis in MATLAB
+    if save_stc_mat:
+        for i in range(len(labels)):
+            print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
+
+            stc = mne.labels_to_stc(labels, label_ts, src=src)
+
+            # If list (epochs) extract data
+            if isinstance(stc, list):
+                stc_data = [epoch.data for epoch in stc]
+                # Turn into 3D array
+                stc_arr = np.array(stc_data)
+
+            # Save STC Zepochs per region
+            mdict = {"data": stc_arr}
+            savemat(
+                os.path.join(
+                    save_path / "mat", sub_id, f"{labels[i].name}_{condition}.mat"
+                ),
+                mdict,
+            )
+            utils.clear_display()
 
     return label_ts, sub_id_if_nan
 
