@@ -174,6 +174,10 @@ def compute_connectivity_resting_state(
     # Provide the freq points
     freqs = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
 
+    # This function does not support wpli2_debiased, so change to wpli instead
+    if method == "wpli2_debiased":
+        method = "wpli"
+
     con = mne_conn.spectral_connectivity_time(
         data=data,
         freqs=freqs,
@@ -375,9 +379,12 @@ def plot_connectivity(
     num_epochs,
     save_path,
 ):
-    plt.figure(figsize=(20, 10))
     # Plot parameters
+    plt.figure(figsize=(20, 10))
     vmin, vmax = 0.0, 1.0
+    # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
+    if method == "wpli2_debiased":
+        method = "wpli"
 
     im = plt.imshow(
         con_data,
@@ -409,6 +416,10 @@ def plot_connectivity_circle(
     fig, ax = plt.subplots(
         figsize=(8, 8), facecolor="black", subplot_kw=dict(polar=True)
     )
+
+    # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
+    if method == "wpli2_debiased":
+        method = "wpli"
 
     mne_conn.viz.plot_connectivity_circle(
         con_data,
