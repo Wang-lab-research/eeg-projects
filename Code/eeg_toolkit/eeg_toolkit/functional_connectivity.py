@@ -404,7 +404,7 @@ def plot_connectivity(
     plt.yticks(range(len(roi_names)), labels=roi_names)
 
     plt.xlabel("Regions", labelpad=20)
-    plt.xticks(range(len(roi_names)), labels=roi_names, rotation=90)
+    plt.xticks(range(len(roi_names)), labels=roi_names, rotation=45,ha="right")
 
     plt.title(
         f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
