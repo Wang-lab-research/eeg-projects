@@ -375,7 +375,6 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 
 plt.rcParams["font.size"] = 21
 
-
 def plot_connectivity(
     con_data,
     method,
@@ -387,7 +386,7 @@ def plot_connectivity(
     save_path,
 ):
     # Plot parameters
-    plt.figure(figsize=(20, 10))
+    plt.figure(figsize=(20, 15))
     vmin, vmax = 0.0, 1.0
     # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
     if method == "wpli2_debiased":
@@ -481,6 +480,8 @@ def plot_connectivity_circle(
         roi_names,
         title=f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)",
         node_edgecolor="black",
+        node_angles=node_angles,
+        node_colors=node_colors,
         textcolor="white",
         fontsize_names=8,
         vmin=vmin,
