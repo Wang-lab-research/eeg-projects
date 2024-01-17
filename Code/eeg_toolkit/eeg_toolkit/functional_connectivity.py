@@ -387,8 +387,9 @@ def plot_connectivity(
     save_path,
 ):
     # Plot parameters
-    # plt.figure(figsize=(30, 20))
     vmin, vmax = 0.0, 1.0
+    cmap = "inferno"
+
     # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
     if method == "wpli2_debiased":
         method = "wpli"
@@ -397,8 +398,9 @@ def plot_connectivity(
         con_data,
         vmin=vmin,
         vmax=vmax,
+        cmap=cmap,
     )
-    plt.colorbar(im, label="Connectivity")
+    plt.colorbar(im, label="Connectivity", cmap=cmap)
 
     plt.ylabel("Regions", labelpad=20)
     plt.yticks(range(len(roi_names)), labels=roi_names)
