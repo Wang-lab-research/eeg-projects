@@ -129,7 +129,8 @@ def apply_inverse_and_save(
         sub_id_if_nan = sub_id
         # raise ValueError("label_ts contains nan")
 
-    utils.pickle_data(save_path, save_fname, label_ts)
+    # TODO: temporary comment to do just MAT files
+    # utils.pickle_data(save_path, save_fname, label_ts)
 
     # Save STC as MAT file for analysis in MATLAB
     if save_stc_mat:
@@ -138,18 +139,14 @@ def apply_inverse_and_save(
 
             stc = mne.labels_to_stc(labels, label_ts, src=src)
 
-            # If list (epochs) extract data
-            if isinstance(stc, list):
-                stc_data = [epoch.data for epoch in stc]
-                # Turn into 3D array
-                stc_arr = np.array(stc_data)
+            stc_data = stc.data  # [epoch.data for epoch in stc]
+            # Turn into 3D array
+            stc_arr = np.array(stc_data)
 
             # Save STC Zepochs per region
             mdict = {"data": stc_arr}
             savemat(
-                os.path.join(
-                    save_path / "mat", sub_id, f"{labels[i].name}_{condition}.mat"
-                ),
+                os.path.join(save_path, sub_id, f"{labels[i].name}_{condition}.mat"),
                 mdict,
             )
             utils.clear_display()
