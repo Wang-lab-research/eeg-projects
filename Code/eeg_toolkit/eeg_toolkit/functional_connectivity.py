@@ -168,15 +168,18 @@ def compute_connectivity_resting_state(
     tmax,
     sfreq,
 ):
+    # Provide the freq points
+    freqs = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
+
     con = mne_conn.spectral_connectivity_time(
-        label_ts,
+        data=label_ts,
+        freqs=freqs,
         method=method,
         mode="multitaper",
         sfreq=sfreq,
         fmin=fmin,
         fmax=fmax,
         faverage=True,
-        mt_adaptive=True,
         n_jobs=1,
     )
     print(f"*con shape = {con.shape}*")
@@ -276,7 +279,8 @@ def compute_sub_avg_con(
                         sfreq,
                     )
                     # reshape to roi x roi
-                    con = con.reshape(len(roi_names), len(roi_names))
+                    con_data = con.get_data()
+                    con_data = con_data.reshape(len(roi_names), len(roi_names))
 
                 else:
                     # Compute connectivity for resting state
@@ -291,9 +295,10 @@ def compute_sub_avg_con(
                         sfreq,
                     )
                     # reshape to roi x roi
-                    con = con.reshape(len(roi_names), len(roi_names))
+                    con_data = con.get_data()
+                    con_data = con_data.reshape(len(roi_names), len(roi_names))
 
-                print(f"*con shape = {con.shape}*")
+                print(f"*con_data shape = {con_data.shape}*")
 
                 # Add result to dictionary
                 if condition not in results:
@@ -302,7 +307,7 @@ def compute_sub_avg_con(
                     results[condition]["num_epochs"] = num_epochs
                 if method not in results[condition]:
                     results[condition][method] = {}
-                results[condition][method][band_name] = con
+                results[condition][method][band_name] = con_data
     return results
 
 
