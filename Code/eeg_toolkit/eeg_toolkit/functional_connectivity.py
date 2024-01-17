@@ -150,6 +150,7 @@ def compute_connectivity_epochs(
         sfreq=sfreq,
         fmin=fmin,
         fmax=fmax,
+        faverage=True,
         mt_adaptive=True,
         n_jobs=1,
     )
@@ -167,13 +168,7 @@ def compute_connectivity_resting_state(
     tmax,
     sfreq,
 ):
-    (
-        con,
-        freqs,
-        times,
-        n_epochs,
-        n_tapers,
-    ) = mne_conn.spectral_connectivity_time(
+    con = mne_conn.spectral_connectivity_time(
         label_ts,
         method=method,
         mode="multitaper",
@@ -280,24 +275,25 @@ def compute_sub_avg_con(
                         tmax,
                         sfreq,
                     )
-                    # average points across each frequency band
-                    con_band_averaged = np.mean(con.get_data(), axis=1)
-                    con_band_averaged = con_band_averaged.reshape(
-                        len(roi_names), len(roi_names)
-                    )
+                    # reshape to roi x roi
+                    con = con.reshape(len(roi_names), len(roi_names))
 
                 else:
                     # Compute connectivity for resting state
                     con = compute_connectivity_resting_state(
-                        label_ts, roi_names, method, Freq_Bands, sfreq, condition
+                        label_ts,
+                        roi_names,
+                        method,
+                        fmin,
+                        fmax,
+                        tmin,
+                        tmax,
+                        sfreq,
                     )
-                    # average points across each frequency band
-                    con_band_averaged = np.mean(con.get_data(), axis=1)
-                    con_band_averaged = con_band_averaged.reshape(
-                        len(roi_names), len(roi_names)
-                    )
+                    # reshape to roi x roi
+                    con = con.reshape(len(roi_names), len(roi_names))
 
-                print(f"*con_band_averaged shape = {con_band_averaged.shape}*")
+                print(f"*con shape = {con.shape}*")
 
                 # Add result to dictionary
                 if condition not in results:
@@ -306,7 +302,7 @@ def compute_sub_avg_con(
                     results[condition]["num_epochs"] = num_epochs
                 if method not in results[condition]:
                     results[condition][method] = {}
-                results[condition][method][band_name] = con_band_averaged
+                results[condition][method][band_name] = con
     return results
 
 
