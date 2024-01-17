@@ -200,6 +200,7 @@ def compute_sub_avg_con(
     tmin,
     tmax,
     sfreq,
+    include_LS=False,
 ):
     """
     Compute the average connectivity for each subject, group, and condition.
@@ -233,7 +234,7 @@ def compute_sub_avg_con(
         hand_all_ratings,
         back_all_ratings,
     ) = separate_epochs_by_stim(
-        sub_id, processed_data_path, zscored_epochs_data_path, include_LS=False
+        sub_id, processed_data_path, zscored_epochs_data_path, include_LS=include_LS
     )
 
     # Resting state
@@ -245,6 +246,9 @@ def compute_sub_avg_con(
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
     label_ts_all.extend([label_ts_EO, label_ts_EC])
+
+    print(label_ts_all[-1].shape)
+    raise ValueError
 
     # Get the frequency bands
     fmins = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
