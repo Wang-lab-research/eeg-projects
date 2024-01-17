@@ -473,7 +473,7 @@ def plot_connectivity_circle(
     # Plot parameters
     vmin, vmax = 0.0, 1.0
     fig, ax = plt.subplots(
-        figsize=(8, 8), facecolor="black", subplot_kw=dict(polar=True)
+        figsize=(10, 8), facecolor="black", subplot_kw=dict(polar=True)
     )
 
     mne_conn.viz.plot_connectivity_circle(
