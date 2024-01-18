@@ -384,6 +384,8 @@ def plot_connectivity(
     condition,
     num_epochs,
     save_path,
+    cond1=None,
+    cond2=None,
     save_fig=False,
 ):
     """
@@ -406,7 +408,7 @@ def plot_connectivity(
     vmin, vmax = (0.0, 1.0) if condition != "p-values" else (None, None)
     cmap = None  # "hot"
 
-    fig = plt.figure(figsize=(15, 10))
+    plt.figure(figsize=(12, 8))
 
     # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
     if method == "wpli2_debiased":
@@ -433,7 +435,9 @@ def plot_connectivity(
                         color="w",
                     )
 
-    plt.colorbar(im, label="Connectivity", cmap=cmap)
+    plt.colorbar(
+        im, label="Connectivity" if condition != "p-values" else "p-value", cmap=cmap
+    )
 
     plt.ylabel("Regions", labelpad=20)
     plt.yticks(range(len(roi_names)), labels=roi_names)
@@ -442,8 +446,12 @@ def plot_connectivity(
     plt.xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
 
     plt.title(
-        f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
+        f"{group_name} - {condition} - {band} band ({method} method, {num_epochs} trials)"
     )
+    if condition == "p-values":
+        plt.title(
+            f"{group_name} - {cond1} vs {cond2} - {band} band ({method} method, {num_epochs} trials)"
+        )
     filename = f"conn_{group_name}_{condition}_{band}_{method}.png"
     if save_fig:
         plt.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
