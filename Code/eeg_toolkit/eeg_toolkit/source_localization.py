@@ -3,9 +3,9 @@ import os
 import numpy as np
 from mne.datasets import fetch_fsaverage
 import sys
-import hdf5storage
 
-# from scipy.io import savemat
+# import hdf5storage
+from scipy.io import savemat
 
 sys.path.append("/home/wanglab/Documents/George Kenefati/Code/eeg_toolkit/")
 from eeg_toolkit import utils  # noqa: E402
@@ -121,45 +121,51 @@ def apply_inverse_and_save(
         stc = mne.minimum_norm.apply_inverse_epochs(
             mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
         )
+
+        # Save Z-scored Epochs STC only. MAT file for analysis in MATLAB
+        if save_stc_mat:
+            # Extract labels and do mean flip
+            src = inverse_operator["src"]
+            mode = "mean_flip" if average_dipoles else None
+            label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
+
+            for i in range(len(labels)):
+                print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
+
+                stc = mne.labels_to_stc(labels, label_ts, src=src)
+
+                stc_data = stc.data  # [epoch.data for epoch in stc]
+                # Turn into 3D array
+                stc_arr = np.array(stc_data)
+
+                # Save STC Zepochs per region
+                matfiledata = {"data": stc_arr}
+                sub_save_path = os.path.join(save_path, sub_id)
+                save_fname = f"{labels[i].name}_{condition}.mat"
+
+                if not os.path.exists(sub_save_path):
+                    os.makedirs(sub_save_path)
+                # hdf5storage.write(
+                #     matfiledata,
+                #     filename=os.path.join(sub_save_path, save_fname),
+                #     matlab_compatible=True,
+                # )
+                savemat(os.path.join(sub_save_path, save_fname), matfiledata)
     else:
         raise ValueError("Invalid mne_object type")
 
-    src = inverse_operator["src"]
-    mode = "mean_flip" if average_dipoles else None
-    label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
-    if np.isnan(label_ts).any():
-        sub_id_if_nan = sub_id
-        # raise ValueError("label_ts contains nan")
+    if not save_stc_mat:
+        # Save as pickle
+        src = inverse_operator["src"]
+        mode = "mean_flip" if average_dipoles else None
+        label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
+        if np.isnan(label_ts).any():
+            sub_id_if_nan = sub_id
+            # raise ValueError("label_ts contains nan")
 
-    # TODO: temporary comment to do just MAT files
-    # utils.pickle_data(save_path, save_fname, label_ts)
+        utils.pickle_data(save_path, save_fname, label_ts)
 
-    # Save STC as MAT file for analysis in MATLAB
-    if save_stc_mat:
-        for i in range(len(labels)):
-            print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
-
-            stc = mne.labels_to_stc(labels, label_ts, src=src)
-
-            stc_data = stc.data  # [epoch.data for epoch in stc]
-            # Turn into 3D array
-            stc_arr = np.array(stc_data)
-
-            # Save STC Zepochs per region
-            matfiledata = {"data": stc_arr}
-            sub_save_path = os.path.join(save_path, sub_id)
-            save_fname = f"{labels[i].name}_{condition}.mat"
-
-            if not os.path.exists(sub_save_path):
-                os.makedirs(sub_save_path)
-            hdf5storage.write(
-                matfiledata,
-                sub_save_path,
-                f"{labels[i].name}_{condition}.mat",
-                matlab_compatible=True,
-            )
-
-            utils.clear_display()
+    utils.clear_display()
 
     return label_ts, sub_id_if_nan
 
