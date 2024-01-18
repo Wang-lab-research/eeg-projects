@@ -384,8 +384,7 @@ def plot_connectivity(
     condition,
     num_epochs,
     save_path,
-    cond1=None,
-    cond2=None,
+    title_prefix=None,
     save_fig=False,
 ):
     """
@@ -450,7 +449,7 @@ def plot_connectivity(
     )
     if condition == "p-values":
         plt.title(
-            f"{group_name} - {cond1} vs {cond2} - {band} band ({method} method, {num_epochs} trials)"
+            f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)"
         )
     filename = f"conn_{group_name}_{condition}_{band}_{method}.png"
     if save_fig:
