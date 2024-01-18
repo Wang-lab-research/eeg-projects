@@ -134,7 +134,7 @@ def apply_inverse_and_save(
 
     # Save STC as MAT file for analysis in MATLAB
     if save_stc_mat:
-        for i in range(len(labels)):
+        for i in range(len(labels)): 
             print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
 
             stc = mne.labels_to_stc(labels, label_ts, src=src)

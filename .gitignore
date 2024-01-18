@@ -26,3 +26,6 @@ My*/
 
 # Ignore vscode workspace
 George Kenefati.code-workspace
+
+# Ignore presentations
+Presentations/
