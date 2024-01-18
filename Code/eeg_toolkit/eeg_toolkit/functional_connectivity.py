@@ -348,20 +348,20 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
         for method in con_methods:
             for band in band_names:
                 # Compute the average for all subjects
-                avg = np.mean(
+                concat = np.concatenate(
                     [
                         sub_con_dict[subject][condition][method][band]
                         for subject in subjects
                     ],
                     axis=0,
                 )
-
+                print(concat.shape)
                 # Add result to dictionary
                 if condition not in avg_dict:
                     avg_dict[condition] = {}
                 if method not in avg_dict[condition]:
                     avg_dict[condition][method] = {}
-                avg_dict[condition][method][band] = avg
+                avg_dict[condition][method][band] = concat
 
         # Sum the number of epochs in each condition
         num_epochs = np.sum(
