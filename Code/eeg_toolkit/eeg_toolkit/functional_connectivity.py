@@ -348,20 +348,20 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
         for method in con_methods:
             for band in band_names:
                 # Compute the average for all subjects
-                concat = np.concatenate(
+                stack = np.stack(
                     [
                         sub_con_dict[subject][condition][method][band]
                         for subject in subjects
                     ],
-                    axis=0,
+                    axis=None,
                 )
-                print(concat.shape)
+
                 # Add result to dictionary
                 if condition not in avg_dict:
                     avg_dict[condition] = {}
                 if method not in avg_dict[condition]:
                     avg_dict[condition][method] = {}
-                avg_dict[condition][method][band] = concat
+                avg_dict[condition][method][band] = stack
 
         # Sum the number of epochs in each condition
         num_epochs = np.sum(
@@ -536,3 +536,70 @@ def plot_connectivity_circle(
 #             plt.xlabel("Time (s)")
 #             plt.ylabel(f"Global {k} wPLI over trials")
 #             plt.title(f"Global {k} wPLI peaks {times[t_con_max]:.3f}s after stimulus")
+
+#########################################################################
+# GPT code for stats and overlaying stats on plot
+
+import numpy as np
+import scipy.stats as stats
+
+
+def mann_whitney_test(sub_con_CP, sub_con_HC):
+    p_values = np.zeros((12, 12))
+    means_CP = np.zeros((12, 12))
+    means_HC = np.zeros((12, 12))
+    sem_CP = np.zeros((12, 12))
+    sem_HC = np.zeros((12, 12))
+
+    for i in range(12):
+        for j in range(12):
+            # Perform Mann-Whitney U test
+            u, p = stats.mannwhitneyu(sub_con_CP[:, i, j], sub_con_HC[:, i, j])
+            p_values[i, j] = p
+
+            # Calculate means
+            means_CP[i, j] = np.mean(sub_con_CP[:, i, j])
+            means_HC[i, j] = np.mean(sub_con_HC[:, i, j])
+
+            # Calculate SEM
+            sem_CP[i, j] = stats.sem(sub_con_CP[:, i, j])
+            sem_HC[i, j] = stats.sem(sub_con_HC[:, i, j])
+
+    return p_values, means_CP, sem_CP, means_HC, sem_HC
+
+
+import matplotlib.pyplot as plt
+
+
+def plot_results(sub_con_CP, sub_con_HC):
+    p_values, means_CP, sem_CP, means_HC, sem_HC = mann_whitney_test(
+        sub_con_CP, sub_con_HC
+    )
+
+    fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+
+    # Plot for CP
+    im1 = axs[0, 0].imshow(means_CP)
+    axs[0, 0].set_title("CP Mean")
+    fig.colorbar(im1, ax=axs[0, 0])
+
+    im2 = axs[0, 1].imshow(sem_CP)
+    axs[0, 1].set_title("CP SEM")
+    fig.colorbar(im2, ax=axs[0, 1])
+
+    # Plot for HC
+    im3 = axs[1, 0].imshow(means_HC)
+    axs[1, 0].set_title("HC Mean")
+    fig.colorbar(im3, ax=axs[1, 0])
+
+    im4 = axs[1, 1].imshow(sem_HC)
+    axs[1, 1].set_title("HC SEM")
+    fig.colorbar(im4, ax=axs[1, 1])
+
+    # Plot for p-values
+    fig, ax = plt.subplots(figsize=(5, 5))
+    im5 = ax.imshow(p_values)
+    ax.set_title("P-values")
+    fig.colorbar(im5, ax=ax)
+
+    plt.show()
