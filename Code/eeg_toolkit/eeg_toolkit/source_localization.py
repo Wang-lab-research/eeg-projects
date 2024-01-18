@@ -34,7 +34,7 @@ def load_raw(data_path, sub_id, condition):
     return raw
 
 
-def zscore_epochs(sub_id, data_path, tmin, raw_eo):
+def zscore_epochs(sub_id, data_path, tmin, raw):
     """
     Calculate the z-scores for each epoch in the given EEG dataset.
 
@@ -42,7 +42,7 @@ def zscore_epochs(sub_id, data_path, tmin, raw_eo):
         sub_id (str): The subject ID.
         data_path (str): The path to the data directory.
         tmin (float): The start time of the epochs in seconds.
-        raw_eo (mne.Raw): The raw EEG data.
+        raw (mne.Raw): The raw EEG data.
 
     Returns:
         zepochs (mne.EpochsArray): The z-scored epochs.
@@ -75,7 +75,7 @@ def zscore_epochs(sub_id, data_path, tmin, raw_eo):
         event_id=epochs.event_id,
         events=epochs.events,
     )
-    utils.set_montage(zepochs, raw_eo.get_montage())
+    utils.set_montage(zepochs, raw.get_montage())
 
     return zepochs
 
@@ -111,6 +111,7 @@ def apply_inverse_and_save(
         verbose=True,
     )
     sub_id_if_nan = None
+    label_ts = None
     if isinstance(mne_object, mne.io.fiff.raw.Raw):
         print("Applying inverse to Raw object")
         stc = mne.minimum_norm.apply_inverse_raw(
@@ -284,6 +285,7 @@ def to_source(
     #################################################################################################
 
     # If processing resting, check directories for count
+    raw = load_raw(data_path, sub_id, condition="preprocessed")
     if return_EO_resting:
         raw_eo = load_raw(data_path, sub_id, condition="eyes_open")
         EO_save_fname = f"{sub_id}_eyes_open.pkl"
@@ -339,7 +341,7 @@ def to_source(
     if return_zepochs and not os.path.exists(
         f"{zscored_epochs_save_path}/{zepochs_save_fname}"
     ):
-        zepochs = zscore_epochs(sub_id, data_path, tmin, raw_eo)
+        zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
 
         label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
             sub_id,
