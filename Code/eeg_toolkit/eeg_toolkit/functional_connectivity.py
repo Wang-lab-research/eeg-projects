@@ -384,7 +384,7 @@ def plot_connectivity(
     condition,
     num_epochs,
     save_path,
-    return_png=False,
+    save_fig=False,
 ):
     """
     Generate a plot of connectivity data.
@@ -403,8 +403,10 @@ def plot_connectivity(
         None
     """
     # Plot parameters
-    vmin, vmax = 0.0, 1.0 if condition != "p-values" else None, None
+    vmin, vmax = (0.0, 1.0) if condition != "p-values" else (None, None)
     cmap = None  # "hot"
+
+    fig = plt.figure(figsize=(15, 10))
 
     # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
     if method == "wpli2_debiased":
@@ -416,6 +418,21 @@ def plot_connectivity(
         vmax=vmax,
         cmap=cmap,
     )
+
+    if condition == "p-values":
+        # Overlay p-values
+        for i in range(len(roi_names)):
+            for j in range(len(roi_names)):
+                if con_data[i, j] < 0.05:
+                    plt.text(
+                        j,
+                        i,
+                        round(con_data[i, j], 3),
+                        ha="center",
+                        va="center",
+                        color="w",
+                    )
+
     plt.colorbar(im, label="Connectivity", cmap=cmap)
 
     plt.ylabel("Regions", labelpad=20)
@@ -428,7 +445,7 @@ def plot_connectivity(
         f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
     )
     filename = f"conn_{group_name}_{condition}_{band}_{method}.png"
-    if return_png:
+    if save_fig:
         plt.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
     plt.show()
     plt.close()
