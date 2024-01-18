@@ -585,37 +585,3 @@ def mann_whitney_test(group1_stack, group2_stack, roi_names):
             sem_2[i, j] = stats.sem(group2_stack[:, i, j])
 
     return p_values, means_1, sem_1, means_2, sem_2
-
-
-def plot_results(group1_stack, group2_stack):
-    p_values, means_1, sem_1, means_2, sem_2 = mann_whitney_test(
-        group1_stack, group2_stack
-    )
-
-    fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-
-    # Plot for CP
-    im1 = axs[0, 0].imshow(means_1)
-    axs[0, 0].set_title("CP Mean")
-    fig.colorbar(im1, ax=axs[0, 0])
-
-    im2 = axs[0, 1].imshow(sem_1)
-    axs[0, 1].set_title("CP SEM")
-    fig.colorbar(im2, ax=axs[0, 1])
-
-    # Plot for HC
-    im3 = axs[1, 0].imshow(means_2)
-    axs[1, 0].set_title("HC Mean")
-    fig.colorbar(im3, ax=axs[1, 0])
-
-    im4 = axs[1, 1].imshow(sem_2)
-    axs[1, 1].set_title("HC SEM")
-    fig.colorbar(im4, ax=axs[1, 1])
-
-    # Plot for p-values
-    fig, ax = plt.subplots(figsize=(5, 5))
-    im5 = ax.imshow(p_values)
-    ax.set_title("P-values")
-    fig.colorbar(im5, ax=ax)
-
-    plt.show()
