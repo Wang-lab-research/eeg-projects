@@ -451,6 +451,8 @@ def plot_connectivity(
         plt.title(
             f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)"
         )
+        filename = f"conn_{condition}_{band}_{method}.png"
+
     filename = f"conn_{group_name}_{condition}_{band}_{method}.png"
     if save_fig:
         plt.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
