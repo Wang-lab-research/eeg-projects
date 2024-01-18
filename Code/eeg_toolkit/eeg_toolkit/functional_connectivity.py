@@ -6,6 +6,7 @@ import scipy.io as sio
 import os
 import numpy as np
 from tabulate import tabulate
+import scipy.stats as stats
 
 from mne.datasets import fetch_fsaverage
 
@@ -353,9 +354,7 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
                         sub_con_dict[subject][condition][method][band]
                         for subject in subjects
                     ],
-                    axis=None,
                 )
-
                 # Add result to dictionary
                 if condition not in avg_dict:
                     avg_dict[condition] = {}
@@ -386,6 +385,22 @@ def plot_connectivity(
     num_epochs,
     save_path,
 ):
+    """
+    Generate a plot of connectivity data.
+
+    Parameters:
+        con_data (ndarray): The connectivity data to plot.
+        method (str): The connectivity method used.
+        band (str): The frequency band of the connectivity data.
+        roi_names (list): The names of the regions of interest.
+        group_name (str): The name of the group.
+        condition (str): The condition of the data.
+        num_epochs (int): The number of epochs.
+        save_path (str): The path to save the plot.
+
+    Returns:
+        None
+    """
     # Plot parameters
     vmin, vmax = 0.0, 1.0
     cmap = None  # "hot"
@@ -420,6 +435,22 @@ def plot_connectivity(
 def plot_connectivity_circle(
     con_data, method, band, roi_names, group_name, condition, num_epochs, save_path
 ):
+    """
+    Plot the connectivity circle for the given connectivity data.
+
+    Args:
+        con_data (numpy.ndarray): The connectivity data.
+        method (str): The method used for connectivity estimation.
+        band (str): The frequency band used for connectivity estimation.
+        roi_names (list): The names of the regions of interest.
+        group_name (str): The name of the group.
+        condition (str): The condition of the data.
+        num_epochs (int): The number of epochs.
+        save_path (str): The path to save the plot.
+
+    Returns:
+        None
+    """
     # Convert ROI names to labels
     labels = [
         mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
@@ -503,96 +534,53 @@ def plot_connectivity_circle(
     plt.close()
 
 
-# def plot_global_connectivity(epochs, tmin, tmax, n_connections, con_epochs, Freq_Bands):
-#     """
-#     Plot the global connectivity over time.
+def mann_whitney_test(group1_stack, group2_stack, roi_names):
+    n = len(roi_names)
+    p_values = np.zeros((n, n))
+    means_1 = np.zeros((n, n))
+    means_2 = np.zeros((n, n))
+    sem_1 = np.zeros((n, n))
+    sem_2 = np.zeros((n, n))
 
-#     Args:
-#         epochs (Epochs): The epochs data.
-#         tmin (float): The minimum time value to include in the plot.
-#         tmax (float): The maximum time value to include in the plot.
-#         n_connections (int): The number of connections.
-#         con_epochs (list): The connectivity epochs.
-#         Freq_Bands (dict): The frequency bands.
-#     """
-
-#     # Get the timepoints within the specified time range
-#     times = epochs.times[(epochs.times >= tmin) & (epochs.times <= tmax)]
-
-#     for c in range(len(con_epochs)):
-#         # Get global average connectivity over all connections
-#         con_epochs_raveled_array = con_epochs[c].get_data(output="raveled")
-#         global_con_epochs = np.sum(con_epochs_raveled_array, axis=0) / n_connections
-
-#         for i, (k, v) in enumerate(Freq_Bands.items()):
-#             global_con_epochs_tmp = global_con_epochs[i]
-
-#             # Get the timepoint with the highest global connectivity right after stimulus
-#             t_con_max = np.argmax(global_con_epochs_tmp[times <= tmax])
-
-#             # Plot the global connectivity
-#             fig = plt.figure()
-#             plt.plot(times, global_con_epochs_tmp)
-#             plt.xlabel("Time (s)")
-#             plt.ylabel(f"Global {k} wPLI over trials")
-#             plt.title(f"Global {k} wPLI peaks {times[t_con_max]:.3f}s after stimulus")
-
-#########################################################################
-# GPT code for stats and overlaying stats on plot
-
-import numpy as np
-import scipy.stats as stats
-
-
-def mann_whitney_test(sub_con_CP, sub_con_HC):
-    p_values = np.zeros((12, 12))
-    means_CP = np.zeros((12, 12))
-    means_HC = np.zeros((12, 12))
-    sem_CP = np.zeros((12, 12))
-    sem_HC = np.zeros((12, 12))
-
-    for i in range(12):
-        for j in range(12):
+    for i in range(n):
+        for j in range(n):
             # Perform Mann-Whitney U test
-            u, p = stats.mannwhitneyu(sub_con_CP[:, i, j], sub_con_HC[:, i, j])
+            u, p = stats.mannwhitneyu(group1_stack[:, i, j], group2_stack[:, i, j])
             p_values[i, j] = p
 
             # Calculate means
-            means_CP[i, j] = np.mean(sub_con_CP[:, i, j])
-            means_HC[i, j] = np.mean(sub_con_HC[:, i, j])
+            means_1[i, j] = np.mean(group1_stack[:, i, j])
+            means_2[i, j] = np.mean(group2_stack[:, i, j])
 
             # Calculate SEM
-            sem_CP[i, j] = stats.sem(sub_con_CP[:, i, j])
-            sem_HC[i, j] = stats.sem(sub_con_HC[:, i, j])
+            sem_1[i, j] = stats.sem(group1_stack[:, i, j])
+            sem_2[i, j] = stats.sem(group2_stack[:, i, j])
 
-    return p_values, means_CP, sem_CP, means_HC, sem_HC
-
-
-import matplotlib.pyplot as plt
+    return p_values, means_1, sem_1, means_2, sem_2
 
 
-def plot_results(sub_con_CP, sub_con_HC):
-    p_values, means_CP, sem_CP, means_HC, sem_HC = mann_whitney_test(
-        sub_con_CP, sub_con_HC
+def plot_results(group1_stack, group2_stack):
+    p_values, means_1, sem_1, means_2, sem_2 = mann_whitney_test(
+        group1_stack, group2_stack
     )
 
     fig, axs = plt.subplots(2, 2, figsize=(10, 10))
 
     # Plot for CP
-    im1 = axs[0, 0].imshow(means_CP)
+    im1 = axs[0, 0].imshow(means_1)
     axs[0, 0].set_title("CP Mean")
     fig.colorbar(im1, ax=axs[0, 0])
 
-    im2 = axs[0, 1].imshow(sem_CP)
+    im2 = axs[0, 1].imshow(sem_1)
     axs[0, 1].set_title("CP SEM")
     fig.colorbar(im2, ax=axs[0, 1])
 
     # Plot for HC
-    im3 = axs[1, 0].imshow(means_HC)
+    im3 = axs[1, 0].imshow(means_2)
     axs[1, 0].set_title("HC Mean")
     fig.colorbar(im3, ax=axs[1, 0])
 
-    im4 = axs[1, 1].imshow(sem_HC)
+    im4 = axs[1, 1].imshow(sem_2)
     axs[1, 1].set_title("HC SEM")
     fig.colorbar(im4, ax=axs[1, 1])
 
