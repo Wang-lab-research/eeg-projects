@@ -3,7 +3,7 @@ import os
 import numpy as np
 from mne.datasets import fetch_fsaverage
 import sys
-from scipy.io import savemat
+import hdf5storage
 
 sys.path.append("/home/wanglab/Documents/George Kenefati/Code/eeg_toolkit/")
 from eeg_toolkit import utils  # noqa: E402
@@ -144,14 +144,17 @@ def apply_inverse_and_save(
             stc_arr = np.array(stc_data)
 
             # Save STC Zepochs per region
-            mdict = {"data": stc_arr}
+            matfiledata = {"data": stc_arr}
             sub_save_path = os.path.join(save_path, sub_id)
             if not os.path.exists(sub_save_path):
                 os.makedirs(sub_save_path)
-            savemat(
-                os.path.join(sub_save_path, f"{labels[i].name}_{condition}.mat"),
-                mdict,
+            hdf5storage.write(
+                matfiledata,
+                sub_save_path,
+                f"{labels[i].name}_{condition}.mat",
+                matlab_compatible=True,
             )
+
             utils.clear_display()
 
     return label_ts, sub_id_if_nan
