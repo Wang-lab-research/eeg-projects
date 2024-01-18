@@ -403,7 +403,7 @@ def plot_connectivity(
         None
     """
     # Plot parameters
-    vmin, vmax = 0.0, 1.0 if condition not "p-values" else None,None
+    vmin, vmax = 0.0, 1.0 if condition != "p-values" else None, None
     cmap = None  # "hot"
 
     # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
