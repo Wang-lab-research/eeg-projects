@@ -384,6 +384,7 @@ def plot_connectivity(
     condition,
     num_epochs,
     save_path,
+    return_png=False,
 ):
     """
     Generate a plot of connectivity data.
@@ -402,7 +403,7 @@ def plot_connectivity(
         None
     """
     # Plot parameters
-    vmin, vmax = 0.0, 1.0
+    vmin, vmax = 0.0, 1.0 if condition not "p-values" else None,None
     cmap = None  # "hot"
 
     # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
@@ -427,7 +428,8 @@ def plot_connectivity(
         f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
     )
     filename = f"conn_{group_name}_{condition}_{band}_{method}.png"
-    plt.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
+    if return_png:
+        plt.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
     plt.show()
     plt.close()
 
