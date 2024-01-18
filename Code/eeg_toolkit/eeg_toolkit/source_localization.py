@@ -134,7 +134,7 @@ def apply_inverse_and_save(
 
     # Save STC as MAT file for analysis in MATLAB
     if save_stc_mat:
-        for i in range(len(labels)): 
+        for i in range(len(labels)):
             print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
 
             stc = mne.labels_to_stc(labels, label_ts, src=src)
@@ -145,8 +145,11 @@ def apply_inverse_and_save(
 
             # Save STC Zepochs per region
             mdict = {"data": stc_arr}
+            sub_save_path = os.path.join(save_path, sub_id)
+            if not os.path.exists(sub_save_path):
+                os.makedirs(sub_save_path)
             savemat(
-                os.path.join(save_path, sub_id, f"{labels[i].name}_{condition}.mat"),
+                os.path.join(sub_save_path, f"{labels[i].name}_{condition}.mat"),
                 mdict,
             )
             utils.clear_display()
