@@ -122,49 +122,51 @@ def apply_inverse_and_save(
         stc = mne.minimum_norm.apply_inverse_epochs(
             mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
         )
-
-        # Save Z-scored Epochs STC only. MAT file for analysis in MATLAB
-        if save_stc_mat:
-            # Extract labels and do mean flip
-            src = inverse_operator["src"]
-            mode = "mean_flip" if average_dipoles else None
-            label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
-
-            for i in range(len(labels)):
-                print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
-
-                stc = mne.labels_to_stc(labels, label_ts, src=src)
-
-                stc_data = stc.data  # [epoch.data for epoch in stc]
-                # Turn into 3D array
-                stc_arr = np.array(stc_data)
-
-                # Save STC Zepochs per region
-                matfiledata = {"data": stc_arr}
-                sub_save_path = os.path.join(save_path, sub_id)
-                save_fname = f"{labels[i].name}_{condition}.mat"
-
-                if not os.path.exists(sub_save_path):
-                    os.makedirs(sub_save_path)
-                # hdf5storage.write(
-                #     matfiledata,
-                #     filename=os.path.join(sub_save_path, save_fname),
-                #     matlab_compatible=True,
-                # )
-                savemat(os.path.join(sub_save_path, save_fname), matfiledata)
     else:
         raise ValueError("Invalid mne_object type")
 
+    # Extract labels and do mean flip
+    src = inverse_operator["src"]
+    mode = "mean_flip" if average_dipoles else None
+    label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
+
     if not save_stc_mat:
         # Save as pickle
-        src = inverse_operator["src"]
-        mode = "mean_flip" if average_dipoles else None
-        label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
-        if np.isnan(label_ts).any():
-            sub_id_if_nan = sub_id
-            # raise ValueError("label_ts contains nan")
-
         utils.pickle_data(save_path, save_fname, label_ts)
+
+    # Save Z-scored Epochs STC only. MAT file for analysis in MATLAB
+    elif save_stc_mat and isinstance(label_ts, list):
+        # Reshape for convention (optional)
+        label_ts = np.reshape(label_ts, (len(labels), -1))
+
+        for i in range(len(labels)):
+            print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
+            print(len(label_ts))
+            print(label_ts[0].shape)
+            stc = mne.labels_to_stc(labels, label_ts, src=src)
+
+            stc_data = stc.data  # [epoch.data for epoch in stc]
+            # Turn into 3D array
+            stc_arr = np.array(stc_data)
+
+            # Save STC Zepochs per region
+            matfiledata = {"data": stc_arr}
+            sub_save_path = os.path.join(save_path, sub_id)
+            save_fname = f"{labels[i].name}_{condition}.mat"
+
+            if not os.path.exists(sub_save_path):
+                os.makedirs(sub_save_path)
+            # hdf5storage.write(
+            #     matfiledata,
+            #     filename=os.path.join(sub_save_path, save_fname),
+            #     matlab_compatible=True,
+            # )
+            savemat(os.path.join(sub_save_path, save_fname), matfiledata)
+
+    # Save subject ID if label time courses contain NaN values
+    if np.isnan(label_ts).any():
+        sub_id_if_nan = sub_id
+        # raise ValueError("label_ts contains nan")
 
     utils.clear_display()
 
