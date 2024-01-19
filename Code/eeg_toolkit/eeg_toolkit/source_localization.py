@@ -211,7 +211,9 @@ def compute_fwd_and_inv(
     sub_save_path = os.path.join(save_path, sub_id)
     if not os.path.exists(sub_save_path):
         os.makedirs(sub_save_path)
-    if len(sub_save_path) < len(labels):
+
+    label_ts, sub_id_if_nan = None, None  # Initialize variables
+    if len(os.listdir(sub_save_path)) < len(labels):
         fwd = mne.make_forward_solution(
             mne_object.info,
             trans=trans,
