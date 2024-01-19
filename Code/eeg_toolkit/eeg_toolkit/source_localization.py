@@ -130,19 +130,23 @@ def apply_inverse_and_save(
     mode = "mean_flip" if average_dipoles else None
     label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
 
+    # Save as pickle
     if not save_stc_mat:
-        # Save as pickle
         utils.pickle_data(save_path, save_fname, label_ts)
 
     # Save Z-scored Epochs STC only. MAT file for analysis in MATLAB
-    elif save_stc_mat and len(label_ts) > 1:  # Check if epochs
+    elif save_stc_mat and isinstance(label_ts, list):
         # Reshape for convention (optional)
-        label_ts = np.reshape(label_ts, (len(labels), -1))
+        nepochs = len(label_ts)
+        label_ts = np.concatenate(label_ts)
+        label_ts = np.reshape(label_ts, (nepochs, len(labels), len(mne_object.times)))
+        print("*label_ts shape = ", label_ts.shape)
 
         for i in range(len(labels)):
             print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
-            print("*label_ts[0] shape = ", label_ts[0].shape)
-            stc = mne.labels_to_stc(labels, label_ts, src=src)
+            label_ts_i = label_ts[i, :, :]
+            print("*label_ts_i shape = ", label_ts_i.shape)
+            stc = mne.labels_to_stc(labels, label_ts_i, src=src)
 
             stc_data = stc.data  # [epoch.data for epoch in stc]
             # Turn into 3D array
@@ -150,16 +154,13 @@ def apply_inverse_and_save(
 
             # Save STC Zepochs per region
             matfiledata = {"data": stc_arr}
-            sub_save_path = os.path.join(save_path, sub_id)
             save_fname = f"{labels[i].name}_{condition}.mat"
-
-            if not os.path.exists(sub_save_path):
-                os.makedirs(sub_save_path)
             # hdf5storage.write(
             #     matfiledata,
             #     filename=os.path.join(sub_save_path, save_fname),
             #     matlab_compatible=True,
             # )
+            sub_save_path = os.path.join(save_path, sub_id)
             savemat(os.path.join(sub_save_path, save_fname), matfiledata)
 
     # Save subject ID if label time courses contain NaN values
@@ -206,33 +207,38 @@ def compute_fwd_and_inv(
     Returns:
         None
     """
-    fwd = mne.make_forward_solution(
-        mne_object.info,
-        trans=trans,
-        src=src,
-        bem=bem,
-        meg=False,
-        eeg=True,
-        n_jobs=-1,
-        verbose=True,
-    )
-    utils.clear_display()
+    # Check if files already saved
+    sub_save_path = os.path.join(save_path, sub_id)
+    if not os.path.exists(sub_save_path):
+        os.makedirs(sub_save_path)
+    if len(sub_save_path) < len(labels):
+        fwd = mne.make_forward_solution(
+            mne_object.info,
+            trans=trans,
+            src=src,
+            bem=bem,
+            meg=False,
+            eeg=True,
+            n_jobs=-1,
+            verbose=True,
+        )
+        utils.clear_display()
 
-    inverse_operator = mne.minimum_norm.make_inverse_operator(
-        mne_object.info, fwd, noise_cov, verbose=True
-    )
+        inverse_operator = mne.minimum_norm.make_inverse_operator(
+            mne_object.info, fwd, noise_cov, verbose=True
+        )
 
-    label_ts, sub_id_if_nan = apply_inverse_and_save(
-        mne_object,
-        inverse_operator,
-        labels,
-        save_path,
-        save_fname,
-        sub_id,
-        condition,
-        average_dipoles=True,
-        save_stc_mat=save_stc_mat,
-    )
+        label_ts, sub_id_if_nan = apply_inverse_and_save(
+            mne_object,
+            inverse_operator,
+            labels,
+            save_path,
+            save_fname,
+            sub_id,
+            condition,
+            average_dipoles=True,
+            save_stc_mat=save_stc_mat,
+        )
 
     return label_ts, sub_id_if_nan
     utils.clear_display()
