@@ -135,14 +135,13 @@ def apply_inverse_and_save(
         utils.pickle_data(save_path, save_fname, label_ts)
 
     # Save Z-scored Epochs STC only. MAT file for analysis in MATLAB
-    elif save_stc_mat and isinstance(label_ts, list):
+    elif save_stc_mat and len(label_ts) > 1:  # Check if epochs
         # Reshape for convention (optional)
         label_ts = np.reshape(label_ts, (len(labels), -1))
 
         for i in range(len(labels)):
             print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
-            print(len(label_ts))
-            print(label_ts[0].shape)
+            print("*label_ts[0] shape = ", label_ts[0].shape)
             stc = mne.labels_to_stc(labels, label_ts, src=src)
 
             stc_data = stc.data  # [epoch.data for epoch in stc]
