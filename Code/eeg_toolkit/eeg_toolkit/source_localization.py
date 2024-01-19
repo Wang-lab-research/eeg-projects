@@ -89,7 +89,7 @@ def apply_inverse_and_save(
     sub_id,
     condition,
     average_dipoles=True,
-    save_stc_mat=True,
+    save_stc_mat=False,
 ):
     """
     Apply inverse operator to MNE object and save STC files.
@@ -184,6 +184,7 @@ def compute_fwd_and_inv(
     save_path,
     save_fname,
     average_dipoles=True,
+    save_stc_mat=False,
 ):
     """
     Save the time course data for specified labels.
@@ -229,6 +230,7 @@ def compute_fwd_and_inv(
         sub_id,
         condition,
         average_dipoles=True,
+        save_stc_mat=save_stc_mat,
     )
 
     return label_ts, sub_id_if_nan
@@ -247,6 +249,7 @@ def to_source(
     return_EC_resting=False,
     return_EO_resting=False,
     average_dipoles=True,
+    save_stc_mat=False,
 ):
     """
     Compute the source localization for a subject for eyes closed, eyes open, and z-scored epochs.
@@ -316,6 +319,7 @@ def to_source(
             EO_resting_save_path,
             EO_save_fname,
             average_dipoles=True,
+            save_stc_mat=save_stc_mat,
         )
 
     # If desired and eyes closed resting data not yet processed, process it
@@ -335,6 +339,7 @@ def to_source(
             EC_resting_save_path,
             EC_save_fname,
             average_dipoles=True,
+            save_stc_mat=save_stc_mat,
         )
 
     # If desired and epochs not yet processed, Z-score and source localize
@@ -356,6 +361,7 @@ def to_source(
             zscored_epochs_save_path,
             zepochs_save_fname,
             average_dipoles=True,
+            save_stc_mat=save_stc_mat,
         )
 
     return (label_ts_EO, label_ts_EC, label_ts_Epochs), sub_id_if_nan
