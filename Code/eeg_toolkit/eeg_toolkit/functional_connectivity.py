@@ -380,6 +380,7 @@ def plot_connectivity(
     method,
     band,
     roi_names,
+    group_name,
     condition,
     num_epochs,
     save_path,
@@ -402,6 +403,10 @@ def plot_connectivity(
     Returns:
         None
     """
+    # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
+    if method == "wpli2_debiased":
+        method = "wpli"
+
     # Plot parameters
     if method == "wpli":
         vmin, vmax = (0.0, 1.0) if condition != "p-values" else (None, None)
@@ -412,9 +417,6 @@ def plot_connectivity(
 
     plt.figure(figsize=(12, 8))
 
-    # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
-    if method == "wpli2_debiased":
-        method = "wpli"
 
     im = plt.imshow(
         con_data,
@@ -475,8 +477,16 @@ def plot_connectivity(
 
 
 def plot_connectivity_circle(
-    con_data, method, band, roi_names, group_name, condition, num_epochs, save_path
-):
+    con_data,
+    method,
+    band,
+    roi_names,
+    condition,
+    group_name,
+    num_epochs,
+    save_path,
+    title_prefix=None,
+    save_fig=False,):
     """
     Plot the connectivity circle for the given connectivity data.
 
@@ -546,7 +556,11 @@ def plot_connectivity_circle(
         method = "wpli"
 
     # Plot parameters
-    vmin, vmax = 0.0, 1.0
+    if method == "wpli":
+        vmin, vmax = (0.0, 1.0) if condition != "p-values" else (None, None)
+    elif method == "dpli":
+        vmin, vmax = (0.0,0.5) if condition != "p-values" else (None, None)
+        
     fig, ax = plt.subplots(
         figsize=(10, 8), facecolor="black", subplot_kw=dict(polar=True)
     )
@@ -554,7 +568,7 @@ def plot_connectivity_circle(
     mne_conn.viz.plot_connectivity_circle(
         con_data,
         roi_names,
-        title=f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)",
+        title=f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)",
         node_edgecolor="black",
         node_angles=node_angles,
         node_colors=node_colors,
@@ -566,12 +580,13 @@ def plot_connectivity_circle(
     )
     fig.tight_layout()
     filename = f"circle_{group_name}_{condition}_{band}_{method}.png"
-    fig.savefig(
-        os.path.join(save_path, filename),
-        facecolor=fig.get_facecolor(),
-        bbox_inches="tight",
-        dpi=300,
-    )  # Save the figure
+    if save_fig:
+        fig.savefig(
+            os.path.join(save_path, filename),
+            facecolor=fig.get_facecolor(),
+            bbox_inches="tight",
+            dpi=300,
+        )
     plt.show()
     plt.close()
 
