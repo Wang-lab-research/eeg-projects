@@ -380,7 +380,6 @@ def plot_connectivity(
     method,
     band,
     roi_names,
-    group_name,
     condition,
     num_epochs,
     save_path,
@@ -404,7 +403,11 @@ def plot_connectivity(
         None
     """
     # Plot parameters
-    vmin, vmax = (0.0, 1.0) if condition != "p-values" else (None, None)
+    if method == "wpli":
+        vmin, vmax = (0.0, 1.0) if condition != "p-values" else (None, None)
+    elif method == "dpli":
+        vmin, vmax = (0.0,0.5) if condition != "p-values" else (None, None)
+        
     cmap = None  # "hot"
 
     plt.figure(figsize=(12, 8))
@@ -445,12 +448,9 @@ def plot_connectivity(
     plt.xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
 
     plt.title(
-        f"{group_name} - {condition} - {band} band ({method} method, {num_epochs} trials)"
+        f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)"
     )
     if condition == "p-values":
-        plt.title(
-            f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)"
-        )
         filename = f"conn_{condition}_{band}_{method}.png"
 
     filename = f"conn_{group_name}_{condition}_{band}_{method}.png"
