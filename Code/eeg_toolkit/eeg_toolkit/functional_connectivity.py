@@ -423,6 +423,7 @@ def plot_connectivity(
         cmap=cmap,
     )
 
+    # Overlay informational text
     if condition == "p-values":
         # Overlay p-values
         for i in range(len(roi_names)):
@@ -436,7 +437,20 @@ def plot_connectivity(
                         va="center",
                         color="w",
                     )
-
+    elif condition == "dpli":
+        # Overlay dpli values
+        for i in range(len(roi_names)):
+            for j in range(len(roi_names)):
+                # if con_data[i, j] > 0.5:
+                plt.text(
+                    j,
+                    i,
+                    round(con_data[i, j], 3),
+                    ha="center",
+                    va="center",
+                    color="w",
+                )
+    
     plt.colorbar(
         im, label="Connectivity" if condition != "p-values" else "p-value", cmap=cmap
     )
