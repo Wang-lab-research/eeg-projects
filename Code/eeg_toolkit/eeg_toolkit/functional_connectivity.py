@@ -409,7 +409,7 @@ def plot_connectivity(
 
     # Plot parameters
     if method == "wpli":
-        vmin, vmax = (0.0, 1.0) if condition != "p-values" else (None, None)
+        vmin, vmax = (0.0, 0.7) if condition != "p-values" else (None, None)
     elif method == "dpli":
         vmin, vmax = (0.0,0.5) if condition != "p-values" else (None, None)
         
@@ -439,7 +439,7 @@ def plot_connectivity(
                         va="center",
                         color="w",
                     )
-    elif condition == "dpli":
+    elif condition != "p-values" and method == "dpli":
         # Overlay dpli values
         for i in range(len(roi_names)):
             for j in range(len(roi_names)):
@@ -557,7 +557,7 @@ def plot_connectivity_circle(
 
     # Plot parameters
     if method == "wpli":
-        vmin, vmax = (0.0, 1.0) if condition != "p-values" else (None, None)
+        vmin, vmax = (0.0, 0.7) if condition != "p-values" else (None, None)
     elif method == "dpli":
         vmin, vmax = (0.0,0.5) if condition != "p-values" else (None, None)
         
