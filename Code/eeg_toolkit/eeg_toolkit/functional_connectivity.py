@@ -409,14 +409,13 @@ def plot_connectivity(
 
     # Plot parameters
     if method == "wpli":
-        vmin, vmax = (0.0, 0.7) if condition != "p-values" else (None, None)
+        vmin, vmax = (0.0, 0.5) if condition != "p-values" else (None, None)
     elif method == "dpli":
-        vmin, vmax = (0.0,0.5) if condition != "p-values" else (None, None)
-        
+        vmin, vmax = (0.0, 0.5) if condition != "p-values" else (None, None)
+
     cmap = None  # "hot"
 
     plt.figure(figsize=(12, 8))
-
 
     im = plt.imshow(
         con_data,
@@ -443,16 +442,16 @@ def plot_connectivity(
         # Overlay dpli values
         for i in range(len(roi_names)):
             for j in range(len(roi_names)):
-                # if con_data[i, j] > 0.5:
-                plt.text(
-                    j,
-                    i,
-                    round(con_data[i, j], 3),
-                    ha="center",
-                    va="center",
-                    color="w",
-                )
-    
+                if con_data[i, j] > 0.0:
+                    plt.text(
+                        j,
+                        i,
+                        round(con_data[i, j], 3),
+                        ha="center",
+                        va="center",
+                        color="k",
+                    )
+
     plt.colorbar(
         im, label="Connectivity" if condition != "p-values" else "p-value", cmap=cmap
     )
@@ -463,9 +462,7 @@ def plot_connectivity(
     plt.xlabel("Regions", labelpad=20)
     plt.xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
 
-    plt.title(
-        f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)"
-    )
+    plt.title(f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)")
     if condition == "p-values":
         filename = f"conn_{condition}_{band}_{method}.png"
 
@@ -486,7 +483,8 @@ def plot_connectivity_circle(
     num_epochs,
     save_path,
     title_prefix=None,
-    save_fig=False,):
+    save_fig=False,
+):
     """
     Plot the connectivity circle for the given connectivity data.
 
@@ -559,8 +557,8 @@ def plot_connectivity_circle(
     if method == "wpli":
         vmin, vmax = (0.0, 0.7) if condition != "p-values" else (None, None)
     elif method == "dpli":
-        vmin, vmax = (0.0,0.5) if condition != "p-values" else (None, None)
-        
+        vmin, vmax = (0.0, 0.5) if condition != "p-values" else (None, None)
+
     fig, ax = plt.subplots(
         figsize=(10, 8), facecolor="black", subplot_kw=dict(polar=True)
     )
