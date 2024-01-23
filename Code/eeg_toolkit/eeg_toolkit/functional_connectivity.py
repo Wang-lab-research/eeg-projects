@@ -425,6 +425,7 @@ def plot_connectivity(
     )
 
     # Overlay informational text
+    highlight_ij = []
     if condition == "p-values":
         # Overlay p-values
         for i in range(len(roi_names)):
@@ -438,19 +439,8 @@ def plot_connectivity(
                         va="center",
                         color="w",
                     )
-    elif condition != "p-values" and method == "dpli":
-        # Overlay dpli values
-        for i in range(len(roi_names)):
-            for j in range(len(roi_names)):
-                if con_data[i, j] > 0.01:
-                    plt.text(
-                        j,
-                        i,
-                        round(con_data[i, j], 3),
-                        ha="center",
-                        va="center",
-                        color="k",
-                    )
+                    highlight_ij.append((i, j))
+
     elif condition != "p-values" and method == "wpli":
         # Overlay dpli values
         for i in range(len(roi_names)):
@@ -464,6 +454,43 @@ def plot_connectivity(
                         va="center",
                         color="w",
                     )
+                if (i, j) in highlight_ij:
+                    plt.gca().add_patch(
+                        plt.Rectangle(
+                            (j - 0.5, i - 0.5),
+                            1,
+                            1,
+                            fill=False,
+                            edgecolor="red",
+                            linewidth=2,
+                        )
+                    )
+
+    elif condition != "p-values" and method == "dpli":
+        # Overlay dpli values
+        for i in range(len(roi_names)):
+            for j in range(len(roi_names)):
+                if con_data[i, j] > 0.01:
+                    plt.text(
+                        j,
+                        i,
+                        round(con_data[i, j], 3),
+                        ha="center",
+                        va="center",
+                        color="k",
+                    )
+                if (i, j) in highlight_ij:
+                    plt.gca().add_patch(
+                        plt.Rectangle(
+                            (j - 0.5, i - 0.5),
+                            1,
+                            1,
+                            fill=False,
+                            edgecolor="red",
+                            linewidth=2,
+                        )
+                    )
+
     plt.colorbar(
         im, label="Connectivity" if condition != "p-values" else "p-value", cmap=cmap
     )
