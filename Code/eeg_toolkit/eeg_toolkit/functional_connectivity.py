@@ -442,7 +442,7 @@ def plot_connectivity(
         # Overlay dpli values
         for i in range(len(roi_names)):
             for j in range(len(roi_names)):
-                if con_data[i, j] > 0.0:
+                if con_data[i, j] > 0.01:
                     plt.text(
                         j,
                         i,
@@ -451,7 +451,19 @@ def plot_connectivity(
                         va="center",
                         color="k",
                     )
-
+    elif condition != "p-values" and method == "wpli":
+        # Overlay dpli values
+        for i in range(len(roi_names)):
+            for j in range(len(roi_names)):
+                if con_data[i, j] > 0.01:
+                    plt.text(
+                        j,
+                        i,
+                        round(con_data[i, j], 3),
+                        ha="center",
+                        va="center",
+                        color="w",
+                    )
     plt.colorbar(
         im, label="Connectivity" if condition != "p-values" else "p-value", cmap=cmap
     )
