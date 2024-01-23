@@ -182,9 +182,9 @@ def compute_connectivity_resting_state(
     # Provide the freq points
     freqs = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
 
-    # This function does not support wpli2_debiased, so change to wpli instead
-    if method == "wpli2_debiased":
-        method = "wpli"
+    # This function does not support dwpli2_debiased, so change to dwpli instead
+    if method == "dwpli2_debiased":
+        method = "dwpli"
 
     con = mne_conn.spectral_connectivity_time(
         data=data,
@@ -295,8 +295,8 @@ def compute_sub_avg_con(
                         sfreq,
                     )
                     # reshape to roi x roi
-                    con_data = con.get_data()
-                    con_data = con_data.reshape(len(roi_names), len(roi_names))
+                    data = con.get_data()
+                    data = data.reshape(len(roi_names), len(roi_names))
 
                 else:
                     # Compute connectivity for resting state
@@ -311,10 +311,10 @@ def compute_sub_avg_con(
                         sfreq,
                     )
                     # reshape to roi x roi
-                    con_data = con.get_data()
-                    con_data = con_data.reshape(len(roi_names), len(roi_names))
+                    data = con.get_data()
+                    data = data.reshape(len(roi_names), len(roi_names))
 
-                print(f"*con_data shape = {con_data.shape}*")
+                print(f"*data shape = {data.shape}*")
 
                 # Add result to dictionary
                 if condition not in results:
@@ -323,7 +323,7 @@ def compute_sub_avg_con(
                     results[condition]["num_epochs"] = num_epochs
                 if method not in results[condition]:
                     results[condition][method] = {}
-                results[condition][method][band_name] = con_data
+                results[condition][method][band_name] = data
     return results
 
 
@@ -375,145 +375,122 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 # plt.rcParams["font.size"] = 21
 
 
-def plot_connectivity(
-    con_data,
+def plot_connectivity_and_stats(
+    means_1,
+    means_2,
+    p_values,
+    nepochs,
+    group_names,
     method,
     band,
     roi_names,
-    group_name,
     condition,
-    num_epochs,
+    titles,
+    save_names,
     save_path,
-    title_prefix=None,
-    save_fig=False,
+    save_fig=True,
 ):
-    """
-    Generate a plot of connectivity data.
-
-    Parameters:
-        con_data (ndarray): The connectivity data to plot.
-        method (str): The connectivity method used.
-        band (str): The frequency band of the connectivity data.
-        roi_names (list): The names of the regions of interest.
-        group_name (str): The name of the group.
-        condition (str): The condition of the data.
-        num_epochs (int): The number of epochs.
-        save_path (str): The path to save the plot.
-
-    Returns:
-        None
-    """
-    # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
+    # Epochs uses dwpli2_debiased while resting state uses dwpli. Change to dwpli in title as an umbrella term
     if method == "wpli2_debiased":
-        method = "wpli"
+        method = "dwpli"
 
-    # Plot parameters
-    if method == "wpli":
-        vmin, vmax = (0.0, 0.5) if condition != "p-values" else (None, None)
-    elif method == "dpli":
-        vmin, vmax = (0.0, 0.5) if condition != "p-values" else (None, None)
-
-    cmap = None  # "hot"
-
-    plt.figure(figsize=(12, 8))
-
-    im = plt.imshow(
-        con_data,
-        vmin=vmin,
-        vmax=vmax,
-        cmap=cmap,
-    )
-
-    # Overlay informational text
+    # Get highlight indices
     highlight_ij = []
-    if condition == "p-values":
-        # Overlay p-values
-        for i in range(len(roi_names)):
-            for j in range(len(roi_names)):
-                if con_data[i, j] < 0.05:
-                    plt.text(
-                        j,
-                        i,
-                        round(con_data[i, j], 3),
-                        ha="center",
-                        va="center",
-                        color="w",
-                    )
-                    highlight_ij.append((i, j))
+    for i in range(len(roi_names)):
+        for j in range(len(roi_names)):
+            if p_values[i, j] < 0.05:
+                highlight_ij.append((i, j))
 
-    elif condition != "p-values" and method == "wpli":
-        # Overlay dpli values
-        for i in range(len(roi_names)):
-            for j in range(len(roi_names)):
-                if con_data[i, j] > 0.01:
-                    plt.text(
-                        j,
-                        i,
-                        round(con_data[i, j], 3),
-                        ha="center",
-                        va="center",
-                        color="w",
-                    )
-                if (i, j) in highlight_ij:
-                    plt.gca().add_patch(
-                        plt.Rectangle(
-                            (j - 0.5, i - 0.5),
-                            1,
-                            1,
-                            fill=False,
-                            edgecolor="red",
-                            linewidth=2,
+    fig, axes = plt.subplots(1, 3, figsize=(36, 8))
+    pval_pos = 0
+    for data_idx, data, ax in zip(
+        range(3),
+        [
+            p_values,
+            means_1,
+            means_2,
+        ],
+        axes,
+    ):
+        # Plot parameters
+        if method == "dwpli":
+            vmin, vmax = (0.0, 0.5) if data_idx != pval_pos else (None, None)
+        elif method == "dpli":
+            vmin, vmax = (0.25, 0.75) if data_idx != pval_pos else (None, None)
+        cmap = None  # "hot"
+
+        im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap)
+
+        # Overlay values
+        if data_idx != pval_pos:
+            for i in range(len(roi_names)):
+                for j in range(len(roi_names)):
+                    if data[i, j] > 0.01:
+                        ax.text(
+                            j,
+                            i,
+                            round(data[i, j], 3),
+                            ha="center",
+                            va="center",
+                            color="k" if method == "dpli" else "w",
                         )
-                    )
-
-    elif condition != "p-values" and method == "dpli":
-        # Overlay dpli values
-        for i in range(len(roi_names)):
-            for j in range(len(roi_names)):
-                if con_data[i, j] > 0.01:
-                    plt.text(
-                        j,
-                        i,
-                        round(con_data[i, j], 3),
-                        ha="center",
-                        va="center",
-                        color="k",
-                    )
-                if (i, j) in highlight_ij:
-                    plt.gca().add_patch(
-                        plt.Rectangle(
-                            (j - 0.5, i - 0.5),
-                            1,
-                            1,
-                            fill=False,
-                            edgecolor="red",
-                            linewidth=2,
+        if data_idx == pval_pos:
+            for i in range(len(roi_names)):
+                for j in range(len(roi_names)):
+                    if data[i, j] < 0.05:
+                        ax.text(
+                            j,
+                            i,
+                            round(data[i, j], 3),
+                            ha="center",
+                            va="center",
+                            color="w",
                         )
-                    )
 
-    plt.colorbar(
-        im, label="Connectivity" if condition != "p-values" else "p-value", cmap=cmap
-    )
+        # Add rectangles for highlighted squares
+        for i, j in highlight_ij:
+            ax.add_patch(
+                plt.Rectangle(
+                    (j - 0.5, i - 0.5),
+                    1,
+                    1,
+                    fill=False,
+                    edgecolor="red",
+                    linewidth=2,
+                )
+            )
 
-    plt.ylabel("Regions", labelpad=20)
-    plt.yticks(range(len(roi_names)), labels=roi_names)
+        if data_idx != 1:  # skip the first plot
+            plt.colorbar(
+                im,
+                label="Connectivity" if data_idx != pval_pos else "p-value",
+                cmap=cmap,
+            )
 
-    plt.xlabel("Regions", labelpad=20)
-    plt.xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
+        axes[0].set_ylabel("Regions", labelpad=20)
+        ax.set_yticks(range(len(roi_names)), labels=roi_names)
 
-    plt.title(f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)")
-    if condition == "p-values":
-        filename = f"conn_{condition}_{band}_{method}.png"
+        ax.set_xlabel("Regions", labelpad=20)
+        ax.set_xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
 
-    filename = f"conn_{group_name}_{condition}_{band}_{method}.png"
+        if data_idx != pval_pos:  # group 1 or group 2
+            ax.set_title(
+                f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[data_idx-1]} trials)"
+            )
+        else:  # p-values
+            ax.set_title(
+                f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
+            )
+
+    filename = f"{condition}_{band}_{method}.png"
     if save_fig:
-        plt.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
+        fig.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
     plt.show()
     plt.close()
 
 
 def plot_connectivity_circle(
-    con_data,
+    data,
     method,
     band,
     roi_names,
@@ -528,7 +505,7 @@ def plot_connectivity_circle(
     Plot the connectivity circle for the given connectivity data.
 
     Args:
-        con_data (numpy.ndarray): The connectivity data.
+        data (numpy.ndarray): The connectivity data.
         method (str): The method used for connectivity estimation.
         band (str): The frequency band used for connectivity estimation.
         roi_names (list): The names of the regions of interest.
@@ -556,15 +533,15 @@ def plot_connectivity_circle(
     # Get the y-location of the label
     label_ypos_lh = list()
     for name in lh_labels:
-        idx = label_names.index(name)
-        ypos = np.mean(labels[idx].pos[:, 1])
+        data_idx = label_names.index(name)
+        ypos = np.mean(labels[data_idx].pos[:, 1])
         label_ypos_lh.append(ypos)
     try:
-        idx = label_names.index("Brain-Stem")
+        data_idx = label_names.index("Brain-Stem")
     except ValueError:
         pass
     else:
-        ypos = np.mean(labels[idx].pos[:, 1])
+        ypos = np.mean(labels[data_idx].pos[:, 1])
         lh_labels.append("Brain-Stem")
         label_ypos_lh.append(ypos)
 
@@ -588,22 +565,22 @@ def plot_connectivity_circle(
         group_boundaries=[0, len(label_names) // 2],
     )
 
-    # Epochs uses wpli2_debiased while resting state uses wpli. Change to wpli in title as an umbrella term
-    if method == "wpli2_debiased":
-        method = "wpli"
+    # Epochs uses dwpli2_debiased while resting state uses dwpli. Change to dwpli in title as an umbrella term
+    if method == "dwpli2_debiased":
+        method = "dwpli"
 
     # Plot parameters
-    if method == "wpli":
-        vmin, vmax = (0.0, 0.7) if condition != "p-values" else (None, None)
+    if method == "dwpli":
+        vmin, vmax = (0.0, 0.7) if i != 2 else (None, None)
     elif method == "dpli":
-        vmin, vmax = (0.0, 0.5) if condition != "p-values" else (None, None)
+        vmin, vmax = (0.0, 0.5) if i != 2 else (None, None)
 
     fig, ax = plt.subplots(
         figsize=(10, 8), facecolor="black", subplot_kw=dict(polar=True)
     )
 
     mne_conn.viz.plot_connectivity_circle(
-        con_data,
+        data,
         roi_names,
         title=f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)",
         node_edgecolor="black",
