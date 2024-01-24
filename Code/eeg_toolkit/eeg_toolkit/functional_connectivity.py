@@ -419,6 +419,11 @@ def plot_connectivity_and_stats(
             vmin, vmax = (0.25, 0.75) if data_idx != pval_pos else (None, None)
         cmap = None  # "hot"
 
+        # Make top-right diagonal and above white  
+        for i in range(len(roi_names)):  
+            for j in range(i, len(roi_names)):  
+                data[i, j] = np.nan  
+
         im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap)
 
         # Overlay values
