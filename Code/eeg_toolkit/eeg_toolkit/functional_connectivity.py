@@ -1,13 +1,12 @@
 from eeg_toolkit import utils, preprocess
-import mne
 import mne_connectivity as mne_conn
 import matplotlib.pyplot as plt
+import matplotlib
 import scipy.io as sio
 import os
 import numpy as np
 from tabulate import tabulate
 import scipy.stats as stats
-
 from mne.datasets import fetch_fsaverage
 
 fs_dir = fetch_fsaverage(verbose=True)
@@ -378,6 +377,8 @@ plt.rcParams["font.size"] = 13
 def plot_connectivity_and_stats(
     means_1,
     means_2,
+    sem_1,
+    sem_2,
     p_values,
     nepochs,
     group_names,
@@ -397,8 +398,29 @@ def plot_connectivity_and_stats(
             if p_values[i, j] < 0.05:
                 highlight_ij.append((i, j))
 
+    # Create figure and indicate position of p-value plot
     fig, axes = plt.subplots(1, 3, figsize=(36, 8))
     pval_pos = 0
+
+    # Clean up labels for plotting
+    if method == "wpli2_debiased":
+        method = "dwPLI"
+    elif method == "dpli":
+        method = "dPLI"
+
+    # Print table summary of mean and sem
+    header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
+    table = []
+    for region_pair in highlight_ij:
+        roi_pair = f"{roi_names[region_pair[0]]} <-> {roi_names[region_pair[1]]}"
+        p_val = np.round(p_values[region_pair[0], region_pair[1]], 3)
+        mean_sem_1 = f"{np.round(means_1[region_pair[0], region_pair[1]],3)} ± {np.round(sem_1[region_pair[0], region_pair[1]],3)}"
+        mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
+
+        table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
+    print(tabulate(table, headers=header, tablefmt="pretty"))
+
+    # Loop through means and p values for plotting
     for data_idx, data, ax in zip(
         range(3),
         [
@@ -408,19 +430,18 @@ def plot_connectivity_and_stats(
         ],
         axes,
     ):
-        # Plot parameters & clean up label
-        if method == "wpli2_debiased":
-            vmin, vmax = (0.0, 0.5) if data_idx != pval_pos else (None, None)
-            method = "dwPLI"
-        elif method == "dpli":
-            vmin, vmax = (0.25, 0.75) if data_idx != pval_pos else (None, None)
-            method = "dPLI"
-        cmap = None  # "hot"
-
+        # Plot parameters
+        if method == "dwPLI":
+            vmin, vmax = (0.0, 0.5) if data_idx != pval_pos else (0, 1)
+        elif method == "dPLI":
+            vmin, vmax = (0.3, 0.7) if data_idx != pval_pos else (0, 1)
+        cmap = matplotlib.cm.viridis  # "hot"
+        
         # Make top-right diagonal and above white
         for i in range(len(roi_names)):
             for j in range(i, len(roi_names)):
                 data[i, j] = np.nan
+        cmap.set_bad('white',1.)
 
         im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap)
 
@@ -428,7 +449,7 @@ def plot_connectivity_and_stats(
         if data_idx != pval_pos:
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
-                    if data[i, j] > 0.01:
+                    if not np.isnan(data[i, j]): #if data[i, j] > 0.01 and 
                         ax.text(
                             j,
                             i,
@@ -441,7 +462,7 @@ def plot_connectivity_and_stats(
         if data_idx == pval_pos:
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
-                    if data[i, j] < 0.05:
+                    if data[i, j] < 0.05 and not np.isnan(data[i, j]):
                         ax.text(
                             j,
                             i,
@@ -487,125 +508,15 @@ def plot_connectivity_and_stats(
                 f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
             )
 
+    # Make top-right diagonal and above white
+    for i in range(len(roi_names)):
+        for j in range(i, len(roi_names)):
+            data[i, j] = np.nan
+
+
     filename = f"{condition}_{band}_{method}.png"
     if save_fig:
         fig.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
-    plt.show()
-    plt.close()
-
-
-def plot_connectivity_circle(
-    data,
-    method,
-    band,
-    roi_names,
-    condition,
-    group_name,
-    num_epochs,
-    save_path,
-    title_prefix=None,
-    save_fig=False,
-):
-    """
-    Plot the connectivity circle for the given connectivity data.
-
-    Args:
-        data (numpy.ndarray): The connectivity data.
-        method (str): The method used for connectivity estimation.
-        band (str): The frequency band used for connectivity estimation.
-        roi_names (list): The names of the regions of interest.
-        group_name (str): The name of the group.
-        condition (str): The condition of the data.
-        num_epochs (int): The number of epochs.
-        save_path (str): The path to save the plot.
-
-    Returns:
-        None
-    """
-    # Convert ROI names to labels
-    labels = [
-        mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
-        for roi in roi_names
-    ]
-    # read colors
-    node_colors = [label.color for label in labels]
-
-    # We reorder the labels based on their location in the left hemi
-    label_names = [label.name for label in labels]
-    lh_labels = [name for name in label_names if name.endswith("lh")]
-    rh_labels = [name for name in label_names if name.endswith("rh")]
-
-    # Get the y-location of the label
-    label_ypos_lh = list()
-    for name in lh_labels:
-        data_idx = label_names.index(name)
-        ypos = np.mean(labels[data_idx].pos[:, 1])
-        label_ypos_lh.append(ypos)
-    try:
-        data_idx = label_names.index("Brain-Stem")
-    except ValueError:
-        pass
-    else:
-        ypos = np.mean(labels[data_idx].pos[:, 1])
-        lh_labels.append("Brain-Stem")
-        label_ypos_lh.append(ypos)
-
-    # Reorder the labels based on their location
-    lh_labels = [label for (yp, label) in sorted(zip(label_ypos_lh, lh_labels))]
-
-    # For the right hemi
-    rh_labels = [
-        label[:-2] + "rh"
-        for label in lh_labels
-        if label != "Brain-Stem" and label[:-2] + "rh" in rh_labels
-    ]
-
-    # Save the plot order
-    node_order = lh_labels[::-1] + rh_labels
-
-    node_angles = mne.viz.circular_layout(
-        label_names,
-        node_order,
-        start_pos=90,
-        group_boundaries=[0, len(label_names) // 2],
-    )
-
-    # Epochs uses dwpli2_debiased while resting state uses dwpli. Change to dwpli in title as an umbrella term
-    if method == "wpli2_debiased":
-        method = "dwPLI"
-
-    # Plot parameters
-    if method == "dwpli":
-        vmin, vmax = (0.0, 0.7) if i != 2 else (None, None)
-    elif method == "dpli":
-        vmin, vmax = (0.0, 0.5) if i != 2 else (None, None)
-
-    fig, ax = plt.subplots(
-        figsize=(10, 8), facecolor="black", subplot_kw=dict(polar=True)
-    )
-
-    mne_conn.viz.plot_connectivity_circle(
-        data,
-        roi_names,
-        title=f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)",
-        node_edgecolor="black",
-        node_angles=node_angles,
-        node_colors=node_colors,
-        textcolor="white",
-        fontsize_names=8,
-        vmin=vmin,
-        vmax=vmax,
-        ax=ax,
-    )
-    fig.tight_layout()
-    filename = f"circle_{group_name}_{condition}_{band}_{method}.png"
-    if save_fig:
-        fig.savefig(
-            os.path.join(save_path, filename),
-            facecolor=fig.get_facecolor(),
-            bbox_inches="tight",
-            dpi=300,
-        )
     plt.show()
     plt.close()
 
@@ -634,7 +545,7 @@ def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
             else:
                 u, p = stats.mannwhitneyu(data1, data2)
                 p_values[i, j] = p
-                
+
             # Calculate means
             means_1[i, j] = np.mean(data1)
             means_2[i, j] = np.mean(data2)
@@ -644,3 +555,119 @@ def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
             sem_2[i, j] = stats.sem(data2)
 
     return p_values, means_1, sem_1, means_2, sem_2
+
+
+# def plot_connectivity_circle(
+#     data,
+#     method,
+#     band,
+#     roi_names,
+#     condition,
+#     group_name,
+#     num_epochs,
+#     save_path,
+#     title_prefix=None,
+#     save_fig=False,
+# ):
+#     """
+#     Plot the connectivity circle for the given connectivity data.
+
+#     Args:
+#         data (numpy.ndarray): The connectivity data.
+#         method (str): The method used for connectivity estimation.
+#         band (str): The frequency band used for connectivity estimation.
+#         roi_names (list): The names of the regions of interest.
+#         group_name (str): The name of the group.
+#         condition (str): The condition of the data.
+#         num_epochs (int): The number of epochs.
+#         save_path (str): The path to save the plot.
+
+#     Returns:
+#         None
+#     """
+#     # Convert ROI names to labels
+#     labels = [
+#         mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
+#         for roi in roi_names
+#     ]
+#     # read colors
+#     node_colors = [label.color for label in labels]
+
+#     # We reorder the labels based on their location in the left hemi
+#     label_names = [label.name for label in labels]
+#     lh_labels = [name for name in label_names if name.endswith("lh")]
+#     rh_labels = [name for name in label_names if name.endswith("rh")]
+
+#     # Get the y-location of the label
+#     label_ypos_lh = list()
+#     for name in lh_labels:
+#         data_idx = label_names.index(name)
+#         ypos = np.mean(labels[data_idx].pos[:, 1])
+#         label_ypos_lh.append(ypos)
+#     try:
+#         data_idx = label_names.index("Brain-Stem")
+#     except ValueError:
+#         pass
+#     else:
+#         ypos = np.mean(labels[data_idx].pos[:, 1])
+#         lh_labels.append("Brain-Stem")
+#         label_ypos_lh.append(ypos)
+
+#     # Reorder the labels based on their location
+#     lh_labels = [label for (yp, label) in sorted(zip(label_ypos_lh, lh_labels))]
+
+#     # For the right hemi
+#     rh_labels = [
+#         label[:-2] + "rh"
+#         for label in lh_labels
+#         if label != "Brain-Stem" and label[:-2] + "rh" in rh_labels
+#     ]
+
+#     # Save the plot order
+#     node_order = lh_labels[::-1] + rh_labels
+
+#     node_angles = mne.viz.circular_layout(
+#         label_names,
+#         node_order,
+#         start_pos=90,
+#         group_boundaries=[0, len(label_names) // 2],
+#     )
+
+#     # Epochs uses dwpli2_debiased while resting state uses dwpli. Change to dwpli in title as an umbrella term
+#     if method == "wpli2_debiased":
+#         method = "dwPLI"
+
+#     # Plot parameters
+#     if method == "dwpli":
+#         vmin, vmax = (0.0, 0.7) if i != 2 else (None, None)
+#     elif method == "dpli":
+#         vmin, vmax = (0.0, 0.5) if i != 2 else (None, None)
+
+#     fig, ax = plt.subplots(
+#         figsize=(10, 8), facecolor="black", subplot_kw=dict(polar=True)
+#     )
+
+#     mne_conn.viz.plot_connectivity_circle(
+#         data,
+#         roi_names,
+#         title=f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)",
+#         node_edgecolor="black",
+#         node_angles=node_angles,
+#         node_colors=node_colors,
+#         textcolor="white",
+#         fontsize_names=8,
+#         vmin=vmin,
+#         vmax=vmax,
+#         ax=ax,
+#     )
+#     fig.tight_layout()
+#     filename = f"circle_{group_name}_{condition}_{band}_{method}.png"
+#     if save_fig:
+#         fig.savefig(
+#             os.path.join(save_path, filename),
+#             facecolor=fig.get_facecolor(),
+#             bbox_inches="tight",
+#             dpi=300,
+#         )
+#     plt.show()
+#     plt.close()
