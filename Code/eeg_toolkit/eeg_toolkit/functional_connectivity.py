@@ -372,7 +372,7 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     return avg_dict
 
 
-# plt.rcParams["font.size"] = 21
+plt.rcParams["font.size"] = 13
 
 
 def plot_connectivity_and_stats(
@@ -390,10 +390,6 @@ def plot_connectivity_and_stats(
     save_path,
     save_fig=True,
 ):
-    # Epochs uses dwpli2_debiased while resting state uses dwpli. Change to dwpli in title as an umbrella term
-    if method == "wpli2_debiased":
-        method = "dwpli"
-
     # Get highlight indices
     highlight_ij = []
     for i in range(len(roi_names)):
@@ -412,17 +408,19 @@ def plot_connectivity_and_stats(
         ],
         axes,
     ):
-        # Plot parameters
-        if method == "dwpli":
+        # Plot parameters & clean up label
+        if method == "wpli2_debiased":
             vmin, vmax = (0.0, 0.5) if data_idx != pval_pos else (None, None)
+            method = "dwPLI"
         elif method == "dpli":
             vmin, vmax = (0.25, 0.75) if data_idx != pval_pos else (None, None)
+            method = "dPLI"
         cmap = None  # "hot"
 
-        # Make top-right diagonal and above white  
-        for i in range(len(roi_names)):  
-            for j in range(i, len(roi_names)):  
-                data[i, j] = np.nan  
+        # Make top-right diagonal and above white
+        for i in range(len(roi_names)):
+            for j in range(i, len(roi_names)):
+                data[i, j] = np.nan
 
         im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap)
 
@@ -437,7 +435,8 @@ def plot_connectivity_and_stats(
                             round(data[i, j], 3),
                             ha="center",
                             va="center",
-                            color="k" if method == "dpli" else "w",
+                            color="k" if method == "dPLI" else "w",
+                            fontsize=11,
                         )
         if data_idx == pval_pos:
             for i in range(len(roi_names)):
@@ -450,6 +449,7 @@ def plot_connectivity_and_stats(
                             ha="center",
                             va="center",
                             color="w",
+                            fontsize=11,
                         )
 
         # Add rectangles for highlighted squares
@@ -571,8 +571,8 @@ def plot_connectivity_circle(
     )
 
     # Epochs uses dwpli2_debiased while resting state uses dwpli. Change to dwpli in title as an umbrella term
-    if method == "dwpli2_debiased":
-        method = "dwpli"
+    if method == "wpli2_debiased":
+        method = "dwPLI"
 
     # Plot parameters
     if method == "dwpli":
@@ -610,7 +610,7 @@ def plot_connectivity_circle(
     plt.close()
 
 
-def mann_whitney_test(group1_stack, group2_stack, roi_names):
+def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
     n = len(roi_names)
     p_values = np.zeros((n, n))
     means_1 = np.zeros((n, n))
@@ -621,15 +621,26 @@ def mann_whitney_test(group1_stack, group2_stack, roi_names):
     for i in range(n):
         for j in range(n):
             # Perform Mann-Whitney U test
-            u, p = stats.mannwhitneyu(group1_stack[:, i, j], group2_stack[:, i, j])
-            p_values[i, j] = p
+            data1 = group1_stack[:, i, j]
+            data2 = group2_stack[:, i, j]
 
+            # If method is 'dpli', adjust data
+            if method == "dpli":
+                data1_tmp = np.abs(data1 - 0.5)
+                data2_tmp = np.abs(data2 - 0.5)
+
+                u, p = stats.mannwhitneyu(data1_tmp, data2_tmp)
+                p_values[i, j] = p
+            else:
+                u, p = stats.mannwhitneyu(data1, data2)
+                p_values[i, j] = p
+                
             # Calculate means
-            means_1[i, j] = np.mean(group1_stack[:, i, j])
-            means_2[i, j] = np.mean(group2_stack[:, i, j])
+            means_1[i, j] = np.mean(data1)
+            means_2[i, j] = np.mean(data2)
 
             # Calculate SEM
-            sem_1[i, j] = stats.sem(group1_stack[:, i, j])
-            sem_2[i, j] = stats.sem(group2_stack[:, i, j])
+            sem_1[i, j] = stats.sem(data1)
+            sem_2[i, j] = stats.sem(data2)
 
     return p_values, means_1, sem_1, means_2, sem_2
