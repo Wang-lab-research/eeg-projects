@@ -1,5 +1,7 @@
 from eeg_toolkit import utils, preprocess
 import mne_connectivity as mne_conn
+from mne_connectivity import envelope_correlation
+import mne
 import matplotlib.pyplot as plt
 import matplotlib
 import scipy.io as sio
@@ -207,7 +209,7 @@ def compute_sub_avg_con(
     zscored_epochs_data_path,
     EO_resting_data_path,
     EC_resting_data_path,
-    connectivity_methods,
+    con_methods,
     conditions,
     roi_names,
     Freq_Bands,
@@ -226,7 +228,7 @@ def compute_sub_avg_con(
         zscored_epochs_data_path (str): The path to the z-scored epochs data.
         EO_resting_data_path (str): The path to the EO resting data.
         EC_resting_data_path (str): The path to the EC resting data.
-        connectivity_methods (list): List of connectivity methods to compute.
+        con_methods (list): List of connectivity methods to compute.
         conditions (list): List of conditions.
         roi_names (list): List of regions of interest names.
         Freq_Bands (dict): Dictionary of frequency bands.
@@ -268,7 +270,7 @@ def compute_sub_avg_con(
     fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
     # Compute connectivity for epochs
-    for method in connectivity_methods:
+    for method in con_methods:
         for label_ts, condition in zip(label_ts_all, conditions):
             num_epochs = len(label_ts)
             if num_epochs == 0:
@@ -282,7 +284,69 @@ def compute_sub_avg_con(
                     ["Method", method],
                 ]
                 print(tabulate(table, tablefmt="grid"))
-                if isinstance(label_ts, list):
+
+                ## Amplitude Envelope Correlation
+                if method == "aec":
+                    # Load the inverse
+                    inv = None
+                    if isinstance(label_ts, list):
+                        inv = utils.unpickle_data(
+                            zscored_epochs_data_path, f"{sub_id}_inv.pkl"
+                        )
+                    elif condition == "Eyes Open":
+                        inv = utils.unpickle_data(
+                            EO_resting_data_path, f"{sub_id}_inv.pkl"
+                        )
+                    elif condition == "Eyes Closed":
+                        inv = utils.unpickle_data(
+                            EC_resting_data_path, f"{sub_id}_inv.pkl"
+                        )
+
+                    # Compute correlation
+                    corr_obj = envelope_correlation(
+                        bp_gen(label_ts, sfreq), orthogonalize="pairwise"
+                    )
+                    corr = corr_obj.combine()
+                    corr = corr.get_data(output="dense")[:, :, 0]
+
+                    plot_corr(corr, "Pairwise")
+
+                    # Convert ROI names to labels
+                    labels = [
+                        mne.read_labels_from_annot(
+                            subject, regexp=roi, subjects_dir=subjects_dir
+                        )[0]
+                        for roi in roi_names
+                    ]
+
+                    brain = plot_degree(
+                        corr, "Beta (pairwise, aparc_sub)", labels=labels, inv=inv
+                    )
+
+                    label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
+                    corr_obj = envelope_correlation(  # already orthogonalized earlier
+                        bp_gen(label_ts_orth), orthogonalize=False
+                    )
+
+                    # average over epochs, take absolute value, and plot
+                    corr = corr_obj.combine()
+                    corr = corr.get_data(output="dense")[:, :, 0]
+                    corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal
+                    corr = np.abs(corr)
+
+                    plot_corr(corr, "Symmetric")
+                    plot_degree(
+                        corr,
+                        title="Beta (symmetric, aparc.a2009s)",
+                        labels=labels,
+                        inv=inv,
+                    )
+                    
+                    # reshape to roi x roi
+                    data = corr.get_data()
+                    data = data.reshape(len(roi_names), len(roi_names))
+
+                elif isinstance(label_ts, list) and method != "aec":
                     con = compute_connectivity_epochs(
                         label_ts,
                         roi_names,
@@ -374,6 +438,37 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 plt.rcParams["font.size"] = 13
 
 
+def bp_gen(label_ts, sfreq):
+    """Make a generator that band-passes on the fly."""
+    for ts in label_ts:
+        yield mne.filter.filter_data(ts, sfreq, 14, 30)
+
+
+def plot_corr(corr, title):
+    fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+    ax.imshow(corr, cmap="viridis", clim=np.percentile(corr, [5, 95]))
+    fig.suptitle(title)
+
+
+def plot_degree(corr, title, labels, inv):
+    threshold_prop = 0.15  # percentage of strongest edges to keep in the graph
+    degree = mne_conn.degree(corr, threshold_prop=threshold_prop)
+    stc = mne.labels_to_stc(labels, degree)
+    stc = stc.in_label(
+        mne.Label(inv["src"][0]["vertno"], hemi="lh")
+        + mne.Label(inv["src"][1]["vertno"], hemi="rh")
+    )
+    return stc.plot(
+        clim=dict(kind="percent", lims=[75, 85, 95]),
+        colormap="gnuplot",
+        subjects_dir=subjects_dir,
+        views="dorsal",
+        hemi="both",
+        smoothing_steps=25,
+        time_label=title,
+    )
+
+
 def plot_connectivity_and_stats(
     means_1,
     means_2,
@@ -436,12 +531,12 @@ def plot_connectivity_and_stats(
         elif method == "dPLI":
             vmin, vmax = (0.3, 0.7) if data_idx != pval_pos else (0, 1)
         cmap = matplotlib.cm.viridis  # "hot"
-        
+
         # Make top-right diagonal and above white
         for i in range(len(roi_names)):
             for j in range(i, len(roi_names)):
                 data[i, j] = np.nan
-        cmap.set_bad('white',1.)
+        cmap.set_bad("white", 1.0)
 
         im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap)
 
@@ -449,7 +544,7 @@ def plot_connectivity_and_stats(
         if data_idx != pval_pos:
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
-                    if not np.isnan(data[i, j]): #if data[i, j] > 0.01 and 
+                    if not np.isnan(data[i, j]):  # if data[i, j] > 0.01 and
                         ax.text(
                             j,
                             i,
@@ -512,7 +607,6 @@ def plot_connectivity_and_stats(
     for i in range(len(roi_names)):
         for j in range(i, len(roi_names)):
             data[i, j] = np.nan
-
 
     filename = f"{condition}_{band}_{method}.png"
     if save_fig:
