@@ -291,15 +291,15 @@ def compute_sub_avg_con(
                     inv = None
                     if isinstance(label_ts, list):
                         inv = utils.unpickle_data(
-                            zscored_epochs_data_path, f"{sub_id}_inv.pkl"
+                            zscored_epochs_data_path/f"{sub_id}_inv.pkl"
                         )
                     elif condition == "Eyes Open":
                         inv = utils.unpickle_data(
-                            EO_resting_data_path, f"{sub_id}_inv.pkl"
+                            EO_resting_data_path/f"{sub_id}_inv.pkl"
                         )
                     elif condition == "Eyes Closed":
                         inv = utils.unpickle_data(
-                            EC_resting_data_path, f"{sub_id}_inv.pkl"
+                            EC_resting_data_path/f"{sub_id}_inv.pkl"
                         )
 
                     # Compute correlation
@@ -319,7 +319,7 @@ def compute_sub_avg_con(
                         for roi in roi_names
                     ]
 
-                    brain = plot_degree(
+                    _ = plot_degree(
                         corr, "Beta (pairwise, aparc_sub)", labels=labels, inv=inv
                     )
 
@@ -341,7 +341,7 @@ def compute_sub_avg_con(
                         labels=labels,
                         inv=inv,
                     )
-                    
+
                     # reshape to roi x roi
                     data = corr.get_data()
                     data = data.reshape(len(roi_names), len(roi_names))

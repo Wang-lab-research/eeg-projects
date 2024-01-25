@@ -224,7 +224,6 @@ def compute_fwd_and_inv(
             eeg=True,
             n_jobs=-1,
             verbose=True,
-            save_inv=True,
         )
         utils.clear_display()
 
@@ -233,8 +232,8 @@ def compute_fwd_and_inv(
         )
         # Save inverse operator
         if save_inv:
-            utils.pickle_data(sub_save_path, f"{sub_id}_inv.pkl", inverse_operator)
-            
+            utils.pickle_data(save_path, f"{sub_id}_inv.pkl", inverse_operator)
+
         label_ts, sub_id_if_nan = apply_inverse_and_save(
             mne_object,
             inverse_operator,
@@ -265,7 +264,6 @@ def to_source(
     average_dipoles=True,
     save_stc_mat=False,
     save_inv=True,
-
 ):
     """
     Compute the source localization for a subject for eyes closed, eyes open, and z-scored epochs.
