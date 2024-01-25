@@ -285,24 +285,11 @@ def compute_sub_avg_con(
 
                 ## Amplitude Envelope Correlation
                 if "aec" in method:
-                    # Load the inverse
-                    inv = None
-                    if isinstance(label_ts, list):
-                        inv = utils.unpickle_data(
-                            zscored_epochs_data_path / f"{sub_id}_inv.pkl"
-                        )
-                    elif condition == "Eyes Open":
-                        inv = utils.unpickle_data(
-                            EO_resting_data_path / f"{sub_id}_inv.pkl"
-                        )
-                    elif condition == "Eyes Closed":
-                        inv = utils.unpickle_data(
-                            EC_resting_data_path / f"{sub_id}_inv.pkl"
-                        )
                     if method == "aec_pairwise":
                         # Compute correlation
                         corr_obj = envelope_correlation(
-                            bp_gen(label_ts, sfreq), orthogonalize="pairwise"
+                            bp_gen(label_ts, sfreq, fmin, fmax),
+                            orthogonalize="pairwise",
                         )
                         corr = corr_obj.combine()
                         corr_pairwise = corr.get_data(output="dense")[:, :, 0]
@@ -313,7 +300,7 @@ def compute_sub_avg_con(
                         label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
                         corr_obj = (
                             envelope_correlation(  # already orthogonalized earlier
-                                bp_gen(label_ts_orth, sfreq), orthogonalize=False
+                                bp_gen(label_ts, sfreq, fmin, fmax), orthogonalize=False
                             )
                         )
 
@@ -416,10 +403,8 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 plt.rcParams["font.size"] = 13
 
 
-def bp_gen(label_ts, sfreq, Freq_Bands, band):
+def bp_gen(label_ts, sfreq, fmin, fmax):
     """Make a generator that band-passes on the fly."""
-    fmin = Freq_Bands[band][0]
-    fmax = Freq_Bands[band][1]
     for ts in label_ts:
         yield mne.filter.filter_data(ts, sfreq, fmin, fmax)
 
