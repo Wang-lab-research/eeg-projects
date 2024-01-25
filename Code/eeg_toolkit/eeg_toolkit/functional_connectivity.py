@@ -289,15 +289,15 @@ def compute_sub_avg_con(
                     inv = None
                     if isinstance(label_ts, list):
                         inv = utils.unpickle_data(
-                            zscored_epochs_data_path/f"{sub_id}_inv.pkl"
+                            zscored_epochs_data_path / f"{sub_id}_inv.pkl"
                         )
                     elif condition == "Eyes Open":
                         inv = utils.unpickle_data(
-                            EO_resting_data_path/f"{sub_id}_inv.pkl"
+                            EO_resting_data_path / f"{sub_id}_inv.pkl"
                         )
                     elif condition == "Eyes Closed":
                         inv = utils.unpickle_data(
-                            EC_resting_data_path/f"{sub_id}_inv.pkl"
+                            EC_resting_data_path / f"{sub_id}_inv.pkl"
                         )
                     if method == "aec_pairwise":
                         # Compute correlation
@@ -311,8 +311,10 @@ def compute_sub_avg_con(
                     if method == "aec_symmetric":
                         # Compute correlation
                         label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
-                        corr_obj = envelope_correlation(  # already orthogonalized earlier
-                            bp_gen(label_ts_orth,sfreq), orthogonalize=False
+                        corr_obj = (
+                            envelope_correlation(  # already orthogonalized earlier
+                                bp_gen(label_ts_orth, sfreq), orthogonalize=False
+                            )
                         )
 
                         # average over epochs, take absolute value, and plot
@@ -321,7 +323,7 @@ def compute_sub_avg_con(
                         corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal
                         corr_symmetric = np.abs(corr)
                         data = corr_symmetric.reshape(len(roi_names), len(roi_names))
-        
+
                 elif isinstance(label_ts, list) and "aec" not in method:
                     con = compute_connectivity_epochs(
                         label_ts,
@@ -416,7 +418,6 @@ plt.rcParams["font.size"] = 13
 
 def bp_gen(label_ts, sfreq, Freq_Bands, band):
     """Make a generator that band-passes on the fly."""
-
     fmin = Freq_Bands[band][0]
     fmax = Freq_Bands[band][1]
     for ts in label_ts:
@@ -447,6 +448,7 @@ def plot_degree(corr, title, labels, inv):
         time_label=title,
     )
 
+
 # Usage of AEC Plotting Functions
 # plot_corr(corr_pairwise, "Pairwise")
 # plot_corr(corr_symmetric, "Symmetric")
@@ -459,6 +461,7 @@ def plot_degree(corr, title, labels, inv):
 #     labels=labels,
 #     inv=inv,
 # )
+
 
 def plot_connectivity_and_stats(
     means_1,
