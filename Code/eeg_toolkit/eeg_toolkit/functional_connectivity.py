@@ -264,8 +264,6 @@ def compute_sub_avg_con(
     label_ts_all.extend([label_ts_EO, label_ts_EC])
 
     # Get the frequency bands
-    fmins = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
-    fmaxs = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
     fmins = [Freq_Bands[f][0] for f in Freq_Bands]
     fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
@@ -286,7 +284,7 @@ def compute_sub_avg_con(
                 print(tabulate(table, tablefmt="grid"))
 
                 ## Amplitude Envelope Correlation
-                if method == "aec":
+                if "aec" in method:
                     # Load the inverse
                     inv = None
                     if isinstance(label_ts, list):
@@ -301,52 +299,30 @@ def compute_sub_avg_con(
                         inv = utils.unpickle_data(
                             EC_resting_data_path/f"{sub_id}_inv.pkl"
                         )
+                    if method == "aec_pairwise":
+                        # Compute correlation
+                        corr_obj = envelope_correlation(
+                            bp_gen(label_ts, sfreq), orthogonalize="pairwise"
+                        )
+                        corr = corr_obj.combine()
+                        corr_pairwise = corr.get_data(output="dense")[:, :, 0]
+                        data = corr_pairwise.reshape(len(roi_names), len(roi_names))
 
-                    # Compute correlation
-                    corr_obj = envelope_correlation(
-                        bp_gen(label_ts, sfreq), orthogonalize="pairwise"
-                    )
-                    corr = corr_obj.combine()
-                    corr = corr.get_data(output="dense")[:, :, 0]
+                    if method == "aec_symmetric":
+                        # Compute correlation
+                        label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
+                        corr_obj = envelope_correlation(  # already orthogonalized earlier
+                            bp_gen(label_ts_orth,sfreq), orthogonalize=False
+                        )
 
-                    plot_corr(corr, "Pairwise")
-
-                    # Convert ROI names to labels
-                    labels = [
-                        mne.read_labels_from_annot(
-                            subject, regexp=roi, subjects_dir=subjects_dir
-                        )[0]
-                        for roi in roi_names
-                    ]
-
-                    _ = plot_degree(
-                        corr, "Beta (pairwise, aparc_sub)", labels=labels, inv=inv
-                    )
-
-                    label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
-                    corr_obj = envelope_correlation(  # already orthogonalized earlier
-                        bp_gen(label_ts_orth), orthogonalize=False
-                    )
-
-                    # average over epochs, take absolute value, and plot
-                    corr = corr_obj.combine()
-                    corr = corr.get_data(output="dense")[:, :, 0]
-                    corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal
-                    corr = np.abs(corr)
-
-                    plot_corr(corr, "Symmetric")
-                    plot_degree(
-                        corr,
-                        title="Beta (symmetric, aparc.a2009s)",
-                        labels=labels,
-                        inv=inv,
-                    )
-
-                    # reshape to roi x roi
-                    data = corr.get_data()
-                    data = data.reshape(len(roi_names), len(roi_names))
-
-                elif isinstance(label_ts, list) and method != "aec":
+                        # average over epochs, take absolute value, and plot
+                        corr = corr_obj.combine()
+                        corr = corr.get_data(output="dense")[:, :, 0]
+                        corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal
+                        corr_symmetric = np.abs(corr)
+                        data = corr_symmetric.reshape(len(roi_names), len(roi_names))
+        
+                elif isinstance(label_ts, list) and "aec" not in method:
                     con = compute_connectivity_epochs(
                         label_ts,
                         roi_names,
@@ -438,10 +414,13 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 plt.rcParams["font.size"] = 13
 
 
-def bp_gen(label_ts, sfreq):
+def bp_gen(label_ts, sfreq, Freq_Bands, band):
     """Make a generator that band-passes on the fly."""
+
+    fmin = Freq_Bands[band][0]
+    fmax = Freq_Bands[band][1]
     for ts in label_ts:
-        yield mne.filter.filter_data(ts, sfreq, 14, 30)
+        yield mne.filter.filter_data(ts, sfreq, fmin, fmax)
 
 
 def plot_corr(corr, title):
@@ -468,6 +447,18 @@ def plot_degree(corr, title, labels, inv):
         time_label=title,
     )
 
+# Usage of AEC Plotting Functions
+# plot_corr(corr_pairwise, "Pairwise")
+# plot_corr(corr_symmetric, "Symmetric")
+# plot_degree(
+#     corr_pairwise, "Beta (pairwise, aparc_sub)", labels=labels, inv=inv
+# )
+# plot_degree(
+#     corr_symmetric,
+#     title="Beta (symmetric, aparc.a2009s)",
+#     labels=labels,
+#     inv=inv,
+# )
 
 def plot_connectivity_and_stats(
     means_1,
