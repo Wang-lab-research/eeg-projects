@@ -523,14 +523,21 @@ def plot_connectivity_and_stats(
     save_path,
     save_fig=True,
 ):
-    # Get highlight indices below the top-right diagonal
-    highlight_ij = [
-        (i, j)
-        for i in range(len(roi_names))
-        for j in range(len(roi_names))
-        if p_values[i, j] < 0.05 and i < j
-    ]
+    
+    # Get highlight indices
+    highlight_ij = []
+    for i in range(len(roi_names)):
+        for j in range(len(roi_names)):
+            if p_values[i, j] < 0.05:
+                highlight_ij.append((i, j))
 
+    # Make top-right diagonal and above white
+    for i in range(len(roi_names)):
+        for j in range(i, len(roi_names)):
+            # Remove those from highlight_ij
+            if (i, j) in highlight_ij:
+                highlight_ij.remove((i, j))
+                
     # Create figure and indicate position of p-value plot
     fig, axes = plt.subplots(1, 3, figsize=(36, 8))
     pval_pos = 0
