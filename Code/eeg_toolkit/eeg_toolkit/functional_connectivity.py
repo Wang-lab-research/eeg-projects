@@ -673,11 +673,11 @@ def plot_connectivity_and_stats(
 
 def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
     n = len(roi_names)
-    p_values = np.vzeros((n, n))
-    means_1 = np.vzeros((n, n))
-    means_2 = np.vzeros((n, n))
-    sem_1 = np.vzeros((n, n))
-    sem_2 = np.vzeros((n, n))
+    p_values = np.zeros((n, n))
+    means_1 = np.zeros((n, n))
+    means_2 = np.zeros((n, n))
+    sem_1 = np.zeros((n, n))
+    sem_2 = np.zeros((n, n))
 
     for i in range(n):
         for j in range(n):
