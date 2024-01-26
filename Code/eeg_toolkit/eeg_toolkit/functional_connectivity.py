@@ -46,7 +46,7 @@ def separate_epochs_by_stim(
     :param sub_id: The ID of the subject.
     :param processed_data_path: The path to the processed data.
     :param stc_data_path: The path to the label time courses.
-    :param pain_thresh: The pain threshold. Default is None.
+    :param pain_thresh: The pain vthresh. Default is None.
 
     Returns:
     - hand_all_label_ts: A tuple containing the label time courses for hand stimuli.
@@ -185,7 +185,7 @@ def compute_connectivity_resting_state(
 
     # This function does not support dwpli2_debiased, so change to dwpli instead
     if method == "dwpli2_debiased":
-        method = "dwpli"
+        method = "wpli"
 
     con = mne_conn.spectral_connectivity_time(
         data=data,
@@ -246,7 +246,7 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
         )
         corr = corr_obj.combine()
         corr = corr.get_data(output="dense")[:, :, 0]
-        corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal
+        corr.flat[:: corr.shape[0] + 1] = 0  # vzero out the diagonal
         corr = np.abs(corr)
 
     return corr
@@ -281,8 +281,8 @@ def plot_degree(corr, title, labels, inv):
     Returns:
     instance of mne.viz.Brain: The plot of the degree connectivity.
     """
-    threshold_prop = 0.15  # percentage of strongest edges to keep in the graph
-    degree = mne_conn.degree(corr, threshold_prop=threshold_prop)
+    vthresh_prop = 0.15  # percentage of strongest edges to keep in the graph
+    degree = mne_conn.degree(corr, vthresh_prop=vthresh_prop)
     stc = mne.labels_to_stc(labels, degree)
     stc = stc.in_label(
         mne.Label(inv["src"][0]["vertno"], hemi="lh")
@@ -562,18 +562,37 @@ def plot_connectivity_and_stats(
         # Plot parameters
         vmin, vmax = None, None
         if method == "dwPLI":
-            vmin, vmax = (0.0, 0.5) if data_idx != pval_pos else (0.0, 1.0)
+            vzero = 0.0
+            vthresh = 0.5
+            vmin, vmax = (
+                (vzero, vzero + vthresh) if data_idx != pval_pos else (0.0, 1.0)
+            )
         elif method == "dPLI":
-            vmin, vmax = (0.3, 0.7) if data_idx != pval_pos else (0.0, 1.0)
+            vzero = 0.5
+            vthresh = 0.2
+            vmin, vmax = (
+                (vzero - vthresh, vzero + vthresh)
+                if data_idx != pval_pos
+                else (0.0, 1.0)
+            )
+        elif "AEC" in method:
+            vzero = 0.0
+            vthresh = 0.3
+            vmin, vmax = (
+                (vzero, vzero + vthresh) if data_idx != pval_pos else (0.0, 1.0)
+            )
 
         cmap = matplotlib.cm.viridis  # "hot"
 
         # Make top-right diagonal and above white
-        if "aec" not in method:
-            for i in range(len(roi_names)):
-                for j in range(i, len(roi_names)):
-                    data[i, j] = np.nan
-            cmap.set_bad   ("white", 1.0)
+        # if "AEC" not in method:
+        for i in range(len(roi_names)):
+            for j in range(i, len(roi_names)):
+                data[i, j] = np.nan
+                # Also remove those from highlight_ij
+                if (i, j) in highlight_ij:
+                    highlight_ij.remove((i, j))
+        cmap.set_bad("white", 1.0)
 
         im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap)
 
@@ -654,11 +673,11 @@ def plot_connectivity_and_stats(
 
 def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
     n = len(roi_names)
-    p_values = np.zeros((n, n))
-    means_1 = np.zeros((n, n))
-    means_2 = np.zeros((n, n))
-    sem_1 = np.zeros((n, n))
-    sem_2 = np.zeros((n, n))
+    p_values = np.vzeros((n, n))
+    means_1 = np.vzeros((n, n))
+    means_2 = np.vzeros((n, n))
+    sem_1 = np.vzeros((n, n))
+    sem_2 = np.vzeros((n, n))
 
     for i in range(n):
         for j in range(n):
