@@ -202,6 +202,97 @@ def compute_connectivity_resting_state(
     return con
 
 
+def bp_gen(label_ts, sfreq, fmin, fmax):
+    """Make a generator that band-passes on the fly."""
+    for ts in label_ts:
+        yield mne.filter.filter_data(ts, sfreq, fmin, fmax)
+
+def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):   
+    """
+    Compute the correlation between regions of interest (ROIs) using different methods.
+    
+    Parameters:
+    - method (str): The method used for computing the correlation. It can be "aec_pairwise" or "aec_symmetric".
+    - label_ts (array-like): The timeseries data for the ROIs.
+    - sfreq (float): The sampling frequency of the timeseries data.
+    - fmin (float): The minimum frequency of interest for the correlation computation.
+    - fmax (float): The maximum frequency of interest for the correlation computation.
+    - roi_names (list): The names of the ROIs.
+    
+    Returns:
+    - data (array): The computed correlation data reshaped to match the ROI names.
+    """
+    data = None  
+    if method == "aec_pairwise":  
+        corr_obj = envelope_correlation(  
+            bp_gen(label_ts, sfreq, fmin, fmax),  
+            orthogonalize="pairwise",  
+        )  
+        corr = corr_obj.combine()  
+        corr = corr.get_data(output="dense")[:, :, 0]  
+        data = corr.reshape(len(roi_names), len(roi_names))  
+  
+    if method == "aec_symmetric":  
+        label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)  
+        corr_obj = (  
+            envelope_correlation(bp_gen(label_ts_orth, sfreq, fmin, fmax), orthogonalize=False)  
+        )  
+        corr = corr_obj.combine()  
+        corr = corr.get_data(output="dense")[:, :, 0]  
+        corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal  
+        corr = np.abs(corr)  
+        data = corr.reshape(len(roi_names), len(roi_names))  
+  
+    return data  
+
+
+def plot_corr(corr, title):
+    """
+    Plots a correlation matrix.
+
+    Args:
+        corr (array-like): The correlation matrix to be plotted.
+        title (str): The title of the plot.
+
+    Returns:
+        None
+    """
+    fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+    ax.imshow(corr, cmap="viridis", clim=np.percentile(corr, [5, 95]))
+    fig.suptitle(title)
+
+
+def plot_degree(corr, title, labels, inv):
+    """
+    Plot the degree of connectivity in the brain network.
+
+    Parameters:
+    corr (array-like): The connectivity matrix.
+    title (str): The title of the plot.
+    labels (Label): The labels for regions of interest.
+    inv (dict): The inverse operator.
+
+    Returns:
+    instance of mne.viz.Brain: The plot of the degree connectivity.
+    """
+    threshold_prop = 0.15  # percentage of strongest edges to keep in the graph
+    degree = mne_conn.degree(corr, threshold_prop=threshold_prop)
+    stc = mne.labels_to_stc(labels, degree)
+    stc = stc.in_label(
+        mne.Label(inv["src"][0]["vertno"], hemi="lh")
+        + mne.Label(inv["src"][1]["vertno"], hemi="rh")
+    )
+    return stc.plot(
+        clim=dict(kind="percent", lims=[75, 85, 95]),
+        colormap="gnuplot",
+        subjects_dir=subjects_dir,
+        views="dorsal",
+        hemi="both",
+        smoothing_steps=25,
+        time_label=title,
+    )
+
+
 def compute_sub_avg_con(
     sub_id,
     group_name,
@@ -284,32 +375,12 @@ def compute_sub_avg_con(
                 print(tabulate(table, tablefmt="grid"))
 
                 ## Amplitude Envelope Correlation
-                if "aec" in method:
-                    if method == "aec_pairwise":
+                if method == "aec_pairwise":
                         # Compute correlation
-                        corr_obj = envelope_correlation(
-                            bp_gen(label_ts, sfreq, fmin, fmax),
-                            orthogonalize="pairwise",
-                        )
-                        corr = corr_obj.combine()
-                        corr_pairwise = corr.get_data(output="dense")[:, :, 0]
-                        data = corr_pairwise.reshape(len(roi_names), len(roi_names))
-
-                    if method == "aec_symmetric":
-                        # Compute correlation
-                        label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
-                        corr_obj = (
-                            envelope_correlation(  # already orthogonalized earlier
-                                bp_gen(label_ts, sfreq, fmin, fmax), orthogonalize=False
-                            )
-                        )
-
-                        # average over epochs, take absolute value, and plot
-                        corr = corr_obj.combine()
-                        corr = corr.get_data(output="dense")[:, :, 0]
-                        corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal
-                        corr_symmetric = np.abs(corr)
-                        data = corr_symmetric.reshape(len(roi_names), len(roi_names))
+                        data = compute_aec("aec_pairwise", label_ts, sfreq, fmin, fmax, roi_names)  
+                elif method == "aec_symmetric":
+                    # Compute correlation
+                    data = compute_aec("aec_symmetric", label_ts, sfreq, fmin, fmax, roi_names)
 
                 elif isinstance(label_ts, list) and "aec" not in method:
                     con = compute_connectivity_epochs(
@@ -326,7 +397,7 @@ def compute_sub_avg_con(
                     data = con.get_data()
                     data = data.reshape(len(roi_names), len(roi_names))
 
-                else:
+                elif not isinstance(label_ts, list) and "aec" not in method:
                     # Compute connectivity for resting state
                     con = compute_connectivity_resting_state(
                         label_ts,
@@ -401,51 +472,6 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 
 
 plt.rcParams["font.size"] = 13
-
-
-def bp_gen(label_ts, sfreq, fmin, fmax):
-    """Make a generator that band-passes on the fly."""
-    for ts in label_ts:
-        yield mne.filter.filter_data(ts, sfreq, fmin, fmax)
-
-
-def plot_corr(corr, title):
-    fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
-    ax.imshow(corr, cmap="viridis", clim=np.percentile(corr, [5, 95]))
-    fig.suptitle(title)
-
-
-def plot_degree(corr, title, labels, inv):
-    threshold_prop = 0.15  # percentage of strongest edges to keep in the graph
-    degree = mne_conn.degree(corr, threshold_prop=threshold_prop)
-    stc = mne.labels_to_stc(labels, degree)
-    stc = stc.in_label(
-        mne.Label(inv["src"][0]["vertno"], hemi="lh")
-        + mne.Label(inv["src"][1]["vertno"], hemi="rh")
-    )
-    return stc.plot(
-        clim=dict(kind="percent", lims=[75, 85, 95]),
-        colormap="gnuplot",
-        subjects_dir=subjects_dir,
-        views="dorsal",
-        hemi="both",
-        smoothing_steps=25,
-        time_label=title,
-    )
-
-
-# Usage of AEC Plotting Functions
-# plot_corr(corr_pairwise, "Pairwise")
-# plot_corr(corr_symmetric, "Symmetric")
-# plot_degree(
-#     corr_pairwise, "Beta (pairwise, aparc_sub)", labels=labels, inv=inv
-# )
-# plot_degree(
-#     corr_symmetric,
-#     title="Beta (symmetric, aparc.a2009s)",
-#     labels=labels,
-#     inv=inv,
-# )
 
 
 def plot_connectivity_and_stats(
