@@ -231,7 +231,7 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
     Returns:
     - data (array): The computed correlation data reshaped to match the ROI names.
     """
-    data = None
+    corr = None
     if method == "aec_pairwise":
         corr_obj = envelope_correlation(
             bp_gen(label_ts, sfreq, fmin, fmax),
@@ -239,8 +239,6 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
         )
         corr = corr_obj.combine()
         corr = corr.get_data(output="dense")[:, :, 0]
-        data = corr.reshape(len(roi_names), len(roi_names))
-
     if method == "aec_symmetric":
         label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
         corr_obj = envelope_correlation(
@@ -571,10 +569,11 @@ def plot_connectivity_and_stats(
         cmap = matplotlib.cm.viridis  # "hot"
 
         # Make top-right diagonal and above white
-        for i in range(len(roi_names)):
-            for j in range(i, len(roi_names)):
-                data[i, j] = np.nan
-        cmap.set_bad("white", 1.0)
+        if "aec" not in method:
+            for i in range(len(roi_names)):
+                for j in range(i, len(roi_names)):
+                    data[i, j] = np.nan
+            cmap.set_bad   ("white", 1.0)
 
         im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap)
 
