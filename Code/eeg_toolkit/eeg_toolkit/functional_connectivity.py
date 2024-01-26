@@ -203,14 +203,23 @@ def compute_connectivity_resting_state(
 
 
 def bp_gen(label_ts, sfreq, fmin, fmax):
-    """Make a generator that band-passes on the fly."""
+    """
+    Generate band-pass filtered data using MNE library.
+
+    :param label_ts: list of time series data
+    :param sfreq: sampling frequency
+    :param fmin: minimum frequency of the passband
+    :param fmax: maximum frequency of the passband
+    :return: generator yielding band-pass filtered data
+    """
     for ts in label_ts:
         yield mne.filter.filter_data(ts, sfreq, fmin, fmax)
 
-def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):   
+
+def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
     """
     Compute the correlation between regions of interest (ROIs) using different methods.
-    
+
     Parameters:
     - method (str): The method used for computing the correlation. It can be "aec_pairwise" or "aec_symmetric".
     - label_ts (array-like): The timeseries data for the ROIs.
@@ -218,32 +227,31 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
     - fmin (float): The minimum frequency of interest for the correlation computation.
     - fmax (float): The maximum frequency of interest for the correlation computation.
     - roi_names (list): The names of the ROIs.
-    
+
     Returns:
     - data (array): The computed correlation data reshaped to match the ROI names.
     """
-    data = None  
-    if method == "aec_pairwise":  
-        corr_obj = envelope_correlation(  
-            bp_gen(label_ts, sfreq, fmin, fmax),  
-            orthogonalize="pairwise",  
-        )  
-        corr = corr_obj.combine()  
-        corr = corr.get_data(output="dense")[:, :, 0]  
-        data = corr.reshape(len(roi_names), len(roi_names))  
-  
-    if method == "aec_symmetric":  
-        label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)  
-        corr_obj = (  
-            envelope_correlation(bp_gen(label_ts_orth, sfreq, fmin, fmax), orthogonalize=False)  
-        )  
-        corr = corr_obj.combine()  
-        corr = corr.get_data(output="dense")[:, :, 0]  
-        corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal  
-        corr = np.abs(corr)  
-        data = corr.reshape(len(roi_names), len(roi_names))  
-  
-    return data  
+    data = None
+    if method == "aec_pairwise":
+        corr_obj = envelope_correlation(
+            bp_gen(label_ts, sfreq, fmin, fmax),
+            orthogonalize="pairwise",
+        )
+        corr = corr_obj.combine()
+        corr = corr.get_data(output="dense")[:, :, 0]
+        data = corr.reshape(len(roi_names), len(roi_names))
+
+    if method == "aec_symmetric":
+        label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
+        corr_obj = envelope_correlation(
+            bp_gen(label_ts_orth, sfreq, fmin, fmax), orthogonalize=False
+        )
+        corr = corr_obj.combine()
+        corr = corr.get_data(output="dense")[:, :, 0]
+        corr.flat[:: corr.shape[0] + 1] = 0  # zero out the diagonal
+        corr = np.abs(corr)
+
+    return corr
 
 
 def plot_corr(corr, title):
@@ -376,11 +384,17 @@ def compute_sub_avg_con(
 
                 ## Amplitude Envelope Correlation
                 if method == "aec_pairwise":
-                        # Compute correlation
-                        data = compute_aec("aec_pairwise", label_ts, sfreq, fmin, fmax, roi_names)  
+                    # Compute correlation
+                    corr = compute_aec(
+                        "aec_pairwise", label_ts, sfreq, fmin, fmax, roi_names
+                    )
+                    data = corr.reshape(len(roi_names), len(roi_names))
                 elif method == "aec_symmetric":
                     # Compute correlation
-                    data = compute_aec("aec_symmetric", label_ts, sfreq, fmin, fmax, roi_names)
+                    corr = compute_aec(
+                        "aec_symmetric", label_ts, sfreq, fmin, fmax, roi_names
+                    )
+                    data = corr.reshape(len(roi_names), len(roi_names))
 
                 elif isinstance(label_ts, list) and "aec" not in method:
                     con = compute_connectivity_epochs(
@@ -474,6 +488,26 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 plt.rcParams["font.size"] = 13
 
 
+def get_method_plot_name(method):
+    """
+    Returns the plot name based on the method provided.
+
+    Args:
+        method (str): The method for which the plot name is to be retrieved.
+
+    Returns:
+        str: The plot name corresponding to the provided method, or the uppercase method if no match is found.
+    """
+    method_dict = {
+        "wpli2_debiased": "dwPLI",
+        "dpli": "dPLI",
+        "aec_pairwise": "AEC Pairwise",
+        "aec_symmetric": "AEC Symmetric",
+    }
+
+    return method_dict.get(method, method.upper())
+
+
 def plot_connectivity_and_stats(
     means_1,
     means_2,
@@ -502,11 +536,8 @@ def plot_connectivity_and_stats(
     fig, axes = plt.subplots(1, 3, figsize=(36, 8))
     pval_pos = 0
 
-    # Clean up labels for plotting
-    if method == "wpli2_debiased":
-        method = "dwPLI"
-    elif method == "dpli":
-        method = "dPLI"
+    # Get method name for plot
+    method = get_method_plot_name(method)
 
     # Print table summary of mean and sem
     header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
@@ -531,10 +562,12 @@ def plot_connectivity_and_stats(
         axes,
     ):
         # Plot parameters
+        vmin, vmax = None, None
         if method == "dwPLI":
-            vmin, vmax = (0.0, 0.5) if data_idx != pval_pos else (0, 1)
+            vmin, vmax = (0.0, 0.5) if data_idx != pval_pos else (0.0, 1.0)
         elif method == "dPLI":
-            vmin, vmax = (0.3, 0.7) if data_idx != pval_pos else (0, 1)
+            vmin, vmax = (0.3, 0.7) if data_idx != pval_pos else (0.0, 1.0)
+
         cmap = matplotlib.cm.viridis  # "hot"
 
         # Make top-right diagonal and above white
