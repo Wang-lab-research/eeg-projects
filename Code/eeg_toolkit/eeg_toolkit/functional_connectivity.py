@@ -523,8 +523,10 @@ def plot_connectivity_and_stats(
     save_path,
     save_fig=True,
     highlight_pvals=True,
+    min_fc_val=-999,  # optional minimum value to highlight
+    set_title=True,
+    show_fc_vals=True,
 ):
-    
     # Get highlight indices
     highlight_ij = []
     for i in range(len(roi_names)):
@@ -538,7 +540,7 @@ def plot_connectivity_and_stats(
             # Remove those from highlight_ij
             if (i, j) in highlight_ij:
                 highlight_ij.remove((i, j))
-                
+
     # Create figure and indicate position of p-value plot
     fig, axes = plt.subplots(1, 3, figsize=(36, 8))
     pval_pos = 0
@@ -606,7 +608,7 @@ def plot_connectivity_and_stats(
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
                     # Ignore really low values
-                    if not np.isnan(data[i, j]) and data[i, j] > 0.1:
+                    if show_fc_vals and not np.isnan(data[i, j]) and data[i, j] > min_fc_val:
                         ax.text(
                             j,
                             i,
@@ -619,7 +621,7 @@ def plot_connectivity_and_stats(
         if data_idx == pval_pos:
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
-                    if data[i, j] < 0.05 and not np.isnan(data[i, j]):
+                    if show_fc_vals and data[i, j] < 0.05 and not np.isnan(data[i, j]):
                         ax.text(
                             j,
                             i,
@@ -657,14 +659,15 @@ def plot_connectivity_and_stats(
         ax.set_xlabel("Regions", labelpad=20)
         ax.set_xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
 
-        if data_idx != pval_pos:  # group 1 or group 2
-            ax.set_title(
-                f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[data_idx-1]} trials)"
-            )
-        else:  # p-values
-            ax.set_title(
-                f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
-            )
+        if set_title:
+            if data_idx != pval_pos:  # group 1 or group 2
+                ax.set_title(
+                    f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[data_idx-1]} trials)"
+                )
+            else:  # p-values
+                ax.set_title(
+                    f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
+                )
 
     # Make top-right diagonal and above white
     for i in range(len(roi_names)):
