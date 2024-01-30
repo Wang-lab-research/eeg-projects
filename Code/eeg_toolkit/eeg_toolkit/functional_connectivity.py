@@ -522,6 +522,7 @@ def plot_connectivity_and_stats(
     save_names,
     save_path,
     save_fig=True,
+    highlight_pvals=True,
 ):
     
     # Get highlight indices
@@ -604,7 +605,8 @@ def plot_connectivity_and_stats(
         if data_idx != pval_pos:
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
-                    if not np.isnan(data[i, j]):  # if data[i, j] > 0.01 and
+                    # Ignore really low values
+                    if not np.isnan(data[i, j]) and data[i, j] > 0.1:
                         ax.text(
                             j,
                             i,
@@ -629,17 +631,18 @@ def plot_connectivity_and_stats(
                         )
 
         # Add rectangles for highlighted squares
-        for i, j in highlight_ij:
-            ax.add_patch(
-                plt.Rectangle(
-                    (j - 0.5, i - 0.5),
-                    1,
-                    1,
-                    fill=False,
-                    edgecolor="red",
-                    linewidth=2,
+        if highlight_pvals:
+            for i, j in highlight_ij:
+                ax.add_patch(
+                    plt.Rectangle(
+                        (j - 0.5, i - 0.5),
+                        1,
+                        1,
+                        fill=False,
+                        edgecolor="red",
+                        linewidth=2,
+                    )
                 )
-            )
 
         if data_idx != 1:  # skip the first plot
             plt.colorbar(

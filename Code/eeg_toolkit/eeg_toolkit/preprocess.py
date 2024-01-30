@@ -62,7 +62,7 @@ def make_sub_time_win_path(
         subpath_zepo = os.path.join(save_path_zepo, sub_id)
         if not os.path.exists(subpath_zepo):  # zepochs
             os.mkdir(subpath_zepo)
-    return subpath_cont,subpath_zepo
+    return subpath_cont, subpath_zepo
 
 
 def load_csv(sub_id, csv_path):
@@ -94,10 +94,11 @@ def crop_by_resting_times(raw, start, stop, sub_id, save_path, category):
     cropped.save(filepath, overwrite=True)
     return cropped
 
+
 def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path):
     """
     Function purpose: Create recording of the full resting EEG
-    Inputs: sub_id = subject ID ie the patient number, 
+    Inputs: sub_id = subject ID ie the patient number,
             raw = *{sub_id}...raw.fif file
             csv_path = file path for the folder with the csv with the resting timestamps
             save_path = file path for saving the recording
@@ -106,59 +107,75 @@ def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path):
             *raw.fif file with recording for eyes open only (e.g. 007_eyes_open-raw.fif)
     """
     timestamp_csv = load_csv(sub_id, csv_path)
-    if timestamp_csv is None: 
+    if timestamp_csv is None:
         print(f"No CSV for {sub_id} found, no cropped recordings created")
         return None
 
-    EC_start, EC_stop, EO_start, EO_stop = timestamp_csv['Seconds'][0:4]
-    
+    EC_start, EC_stop, EO_start, EO_stop = timestamp_csv["Seconds"][0:4]
+
     # Establish timestamps assuming enough recorded for 5 mins of eyes open noise = 2 mins, EO = 3 mins
     # Case 1: Normal case, EO is at least 5 mins long
     noise_start = EO_start
     noise_stop = noise_start + 120
-    cropped_EO_start = noise_stop # Need to reset below
+    cropped_EO_start = noise_stop  # Need to reset below
 
     EO_duration = EO_stop - EO_start
 
     # Adjust durations based on the length of the recording
-    if EO_duration >= 300: # Resting recording is at least 5 mins
+    if EO_duration >= 300:  # Resting recording is at least 5 mins
         noise_stop = EO_start + 120
-    elif EO_duration >= 270: # Resting recording is between 4.5-5 mins
+    elif EO_duration >= 270:  # Resting recording is between 4.5-5 mins
         noise_stop = EO_start + 90
-    else: # Resting recording is less than 4.5 mins
+    else:  # Resting recording is less than 4.5 mins
         noise_stop = EO_start + 60
-    
+
     # Update cropped_EO_start after adjusting noise duration
     cropped_EO_start = noise_stop
-    
+
     cropped_EO_stop = cropped_EO_start + 180  # EO is 3 minutes
-    
+
     # Send message if eyes closed is shorter than 3 mins, otherwise default is 3 min eyes closed recording
     if (EC_stop - EC_start) < 180:
-        print(f"Eyes closed is not longer than 3 mins. Length of EC reading is: {EC_stop- EC_start} seconds.")
+        print(
+            f"Eyes closed is not longer than 3 mins. Length of EC reading is: {EC_stop- EC_start} seconds."
+        )
     else:
         EC_stop = EC_start + 180
-    
 
     # Crop and save the cropped raw data to a raw.fif file
-    EC_cropped = crop_by_resting_times(raw, EC_start, EC_stop, sub_id, save_path, 'eyes_closed')
-    noise_cropped = crop_by_resting_times(raw, noise_start, noise_stop, sub_id, save_path, 'noise')
-    EO_cropped = crop_by_resting_times(raw, cropped_EO_start, cropped_EO_stop, sub_id, save_path, 'eyes_open')
+    EC_cropped = crop_by_resting_times(
+        raw, EC_start, EC_stop, sub_id, save_path, "eyes_closed"
+    )
+    noise_cropped = crop_by_resting_times(
+        raw, noise_start, noise_stop, sub_id, save_path, "noise"
+    )
+    EO_cropped = crop_by_resting_times(
+        raw, cropped_EO_start, cropped_EO_stop, sub_id, save_path, "eyes_open"
+    )
 
     return EC_cropped, noise_cropped, EO_cropped
-    
-def to_raw(data_path, sub_id, save_path, csv_path):  
-    """  
-    Preprocess raw EDF data to filtered FIF format.  
-    """  
-    for sub_folder in os.listdir(data_path):  
-        if sub_folder.startswith(sub_id):  
-            save_fname_fif = sub_id + '_preprocessed-raw.fif'  
-            print(sub_id, save_fname_fif)  
-            break  
-    
-    eeg_data_raw_file = os.path.join(data_path, sub_folder, next(subfile for subfile in os.listdir(os.path.join(data_path,sub_folder)) if (subfile.endswith(('.edf', '.EDF')))))  
-    
+
+
+def to_raw(data_path, sub_id, save_path, csv_path):
+    """
+    Preprocess raw EDF data to filtered FIF format.
+    """
+    for sub_folder in os.listdir(data_path):
+        if sub_folder.startswith(sub_id):
+            save_fname_fif = sub_id + "_preprocessed-raw.fif"
+            print(sub_id, save_fname_fif)
+            break
+
+    eeg_data_raw_file = os.path.join(
+        data_path,
+        sub_folder,
+        next(
+            subfile
+            for subfile in os.listdir(os.path.join(data_path, sub_folder))
+            if (subfile.endswith((".edf", ".EDF")))
+        ),
+    )
+
     # read data, set EOG channel, and drop unused channels
     print(f"{sub_id}\nreading raw file...")
     raw = load_raw_data(eeg_data_raw_file, "eog")
@@ -306,13 +323,19 @@ def to_raw(data_path, sub_id, save_path, csv_path):
     elif "VEOG" in raw.ch_names:
         raw.drop_channels("VEOG")
     elif Fp1_eog_flag:
-        montage_fname = '../montages/Hydro_Neo_Net_32_xyz_cms_No_Fp1.sfp'
-        set_montage(raw,montage_fname)
+        montage_fname = "../montages/Hydro_Neo_Net_32_xyz_cms_No_Fp1.sfp"
+        set_montage(raw, montage_fname)
 
-    eyes_closed_recording, noise_recording, eyes_open_recording = get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path) #get_cropped_resting_EEGs saves the three resting recordings into same folder as raw
-    
+    (
+        eyes_closed_recording,
+        noise_recording,
+        eyes_open_recording,
+    ) = get_cropped_resting_EEGs(
+        sub_id, raw, csv_path, save_path
+    )  # get_cropped_resting_EEGs saves the three resting recordings into same folder as raw
+
     # No need to save raw anymore, saving the cropped files instead
-    # raw.save(save_path+save_fname_fif, 
+    # raw.save(save_path+save_fname_fif,
     #          verbose=True, overwrite=True)
     clear_display()
 
@@ -325,7 +348,7 @@ def to_raw(data_path, sub_id, save_path, csv_path):
 
     clear_display()
 
-    return raw, eyes_closed_recording, noise_recording, eyes_open_recording 
+    return raw, eyes_closed_recording, noise_recording, eyes_open_recording
 
 
 ##############################################
@@ -347,7 +370,13 @@ def to_epo(raw, sub_id, data_path, save_path):
                 list_object.pop(idx)  ## define functions for extracting relevant epochs
 
     def get_stim_epochs(
-        epochs, val_list, key_list, events_from_annot_drop_repeats_list
+        epochs,
+        val_list,
+        key_list,
+        events_from_annot_drop_repeats_list,
+        min_dur_stim=320,
+        max_dur_stim=1800,
+        gap_ITI=100,
     ):
         for i in range(len(epochs) - 1):
             # current epoch
@@ -816,6 +845,11 @@ def to_epo(raw, sub_id, data_path, save_path):
     pp_updown_dur = []
     ITI_stim_gap = []  # uncertain whether this is calculated well enough to output it
 
+    # Print for debug
+    print(epochs)
+    print(val_list)
+    print(key_list)
+        
     # save only stimulus epochs
     (
         stim_labels,
@@ -826,7 +860,15 @@ def to_epo(raw, sub_id, data_path, save_path):
         key_to_pp_lag,
         pp_updown_dur,
         _,
-    ) = get_stim_epochs(epochs, val_list, key_list, events_from_annot_drop_repeats_list)
+    ) = get_stim_epochs(
+        epochs,
+        val_list,
+        key_list,
+        events_from_annot_drop_repeats_list,
+        min_dur_stim=320,
+        max_dur_stim=1800,
+        gap_ITI=100,
+    )
 
     stim_epochs = epochs[StimOn_ids]
     del epochs
@@ -985,11 +1027,11 @@ def to_epo(raw, sub_id, data_path, save_path):
             edf_dir = file
 
     xfname = ""
-    for file in os.listdir(data_path + edf_dir):
+    for file in os.listdir(data_path / edf_dir):
         if file.endswith(".xlsx"):
             xfname = file
 
-    df = pd.read_excel((data_path + edf_dir + "/" + xfname), sheet_name=0)
+    df = pd.read_excel((data_path / edf_dir / xfname), sheet_name=0)
 
     lower_back_flag = 0
     try:
@@ -1322,28 +1364,28 @@ def to_epo(raw, sub_id, data_path, save_path):
     print("\nlen(pain_ratings_lst):\t", len(pain_ratings_lst))
 
     # Complete the saves
-    stim_epochs.save(save_path + save_fname + ".fif", verbose=True, overwrite=True)
+    stim_epochs.save(save_path / save_fname + ".fif", verbose=True, overwrite=True)
 
     # save drop log
     print("\nSaving drop_log as mat file...")
     mdic = {"drop_log": dropped_epochs_list}
-    scio.savemat(save_path + sub_id[:3] + "_drop_log.mat", mdic)
+    scio.savemat(save_path / sub_id[:3] + "_drop_log.mat", mdic)
 
     # save epo_times
     print("\nSaving epoch_times as mat file...")
     mdic = {"epo_times": epo_times}
-    scio.savemat(save_path + sub_id[:3] + "_epo_times.mat", mdic)
+    scio.savemat(save_path / sub_id[:3] + "_epo_times.mat", mdic)
 
     # save stim labels
     print("\nSaving stim_labels as mat file...")
     mdic = {"stim_labels": ground_truth}
     # mdic = {"stim_labels": keys_from_annot}
-    scio.savemat(save_path + sub_id[:3] + "_stim_labels.mat", mdic)
+    scio.savemat(save_path / sub_id[:3] + "_stim_labels.mat", mdic)
 
     # save pain ratings
     print("\nSaving pain_ratings as mat file...\n")
     mdic = {"pain_ratings": pain_ratings_lst}
-    scio.savemat(save_path + sub_id[:3] + "_pain_ratings.mat", mdic)
+    scio.savemat(save_path / sub_id[:3] + "_pain_ratings.mat", mdic)
 
     print("Done.")
     # clear_display()
@@ -1351,6 +1393,8 @@ def to_epo(raw, sub_id, data_path, save_path):
     # verify stim_epochs object looks correct
     print("FINAL EPOCH COUNT:", len(stim_epochs))
     stim_epochs
+
+    return stim_epochs, epo_times, ground_truth, pain_ratings_lst
 
 
 def get_binary_pain_trials(sub_id, pain_ratings_raw, pain_thresh, processed_data_path):
@@ -1377,12 +1421,11 @@ def get_binary_pain_trials(sub_id, pain_ratings_raw, pain_thresh, processed_data
     ):
         # save record of which subjects don't meet the requirement
         with open(
-            processed_data_path + "Insufficient_Pain_Trials_Sub_IDs.txt", "a"
+            processed_data_path / "Insufficient_Pain_Trials_Sub_IDs.txt", "a"
         ) as txt_file:
-            txt_file.write(sub_id + "\n")
+            txt_file.write(sub_id / "\n")
 
         # set pain ratings to None
         pain_ratings = None
 
     return pain_ratings
-
