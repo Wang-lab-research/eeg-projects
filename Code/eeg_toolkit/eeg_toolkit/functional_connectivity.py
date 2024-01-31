@@ -38,7 +38,7 @@ def get_info_by_stim(stim_label, stim_labels, pain_ratings):
 
 # Load in {sub_id}_stim_labels.mat and {sub_id}_pain_ratings.mat} from processed_data_path
 def separate_epochs_by_stim(
-    sub_id, processed_data_path, stc_data_path, include_LS=False, pain_thresh=None
+    sub_id, processed_data_path, stc_data_path, include_LS=True, pain_thresh=None
 ):
     """
     Separates epochs by stimulus for a given subject.
@@ -184,7 +184,7 @@ def compute_connectivity_resting_state(
     freqs = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
 
     # This function does not support dwpli2_debiased, so change to dwpli instead
-    if method == "dwpli2_debiased":
+    if method == "wpli2_debiased":
         method = "wpli"
 
     con = mne_conn.spectral_connectivity_time(
@@ -308,6 +308,7 @@ def compute_sub_avg_con(
     EC_resting_data_path,
     con_methods,
     conditions,
+    condition_dict,
     roi_names,
     Freq_Bands,
     tmin,
@@ -347,8 +348,7 @@ def compute_sub_avg_con(
         hand_all_ratings,
         back_all_ratings,
     ) = separate_epochs_by_stim(
-        sub_id, processed_data_path, zscored_epochs_data_path, include_LS=include_LS
-    )
+        sub_id, processed_data_path, zscored_epochs_data_path)
 
     # Resting state
     EO_filepath = os.path.join(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
@@ -364,9 +364,15 @@ def compute_sub_avg_con(
     fmins = [Freq_Bands[f][0] for f in Freq_Bands]
     fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
+    # Use only label_ts from overlap of condition_dict and conditions
+    desired_conditions_ids = [v for k,v in condition_dict.items() if k in conditions]
+    desired_conditions_ids
+    
+    desired_label_ts = [label_ts_all[i] for i in desired_conditions_ids]
+
     # Compute connectivity for epochs
     for method in con_methods:
-        for label_ts, condition in zip(label_ts_all, conditions):
+        for label_ts, condition in zip(desired_label_ts, conditions):
             num_epochs = len(label_ts)
             if num_epochs == 0:
                 continue
