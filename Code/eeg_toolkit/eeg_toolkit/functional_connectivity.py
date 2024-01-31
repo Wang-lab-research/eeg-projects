@@ -213,7 +213,7 @@ def bp_gen(label_ts, sfreq, fmin, fmax):
     :return: generator yielding band-pass filtered data
     """
     for ts in label_ts:
-        yield mne.filter.filter_data(ts, sfreq, fmin, fmax)
+        yield mne.filter.filter_data(ts, sfreq, fmin, fmax, phase="zero-double")
 
 
 def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
@@ -608,29 +608,31 @@ def plot_connectivity_and_stats(
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
                     # Ignore really low values
-                    if show_fc_vals and not np.isnan(data[i, j]) and data[i, j] > min_fc_val:
-                        ax.text(
-                            j,
-                            i,
-                            round(data[i, j], 3),
-                            ha="center",
-                            va="center",
-                            color="k" if method == "dPLI" else "w",
-                            fontsize=11,
-                        )
+                    if show_fc_vals:
+                        if not np.isnan(data[i, j]) and data[i, j] > min_fc_val:
+                            ax.text(
+                                j,
+                                i,
+                                round(data[i, j], 3),
+                                ha="center",
+                                va="center",
+                                color="k" if method == "dPLI" else "w",
+                                fontsize=11,
+                            )
         if data_idx == pval_pos:
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
-                    if show_fc_vals and data[i, j] < 0.05 and not np.isnan(data[i, j]):
-                        ax.text(
-                            j,
-                            i,
-                            round(data[i, j], 3),
-                            ha="center",
-                            va="center",
-                            color="w",
-                            fontsize=11,
-                        )
+                    if data[i, j] < 0.05 and not np.isnan(data[i, j]):
+                        if show_fc_vals:
+                            ax.text(
+                                j,
+                                i,
+                                round(data[i, j], 3),
+                                ha="center",
+                                va="center",
+                                color="w",
+                                fontsize=11,
+                            )
 
         # Add rectangles for highlighted squares
         if highlight_pvals:
