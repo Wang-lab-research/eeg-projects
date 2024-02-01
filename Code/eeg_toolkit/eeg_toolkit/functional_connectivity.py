@@ -232,6 +232,12 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
     - data (array): The computed correlation data reshaped to match the ROI names.
     """
     corr = None
+
+    # for resting data
+    print(f"label_ts shape =  {np.asarray(label_ts).shape}")
+    if np.asarray(label_ts).ndim == 1:
+        label_ts = [np.expand_dims(np.asarray(label_ts), axis=0)]
+    
     if method == "aec_pairwise":
         corr_obj = envelope_correlation(
             bp_gen(label_ts, sfreq, fmin, fmax),
@@ -347,15 +353,14 @@ def compute_sub_avg_con(
         back_all_label_ts,
         hand_all_ratings,
         back_all_ratings,
-    ) = separate_epochs_by_stim(
-        sub_id, processed_data_path, zscored_epochs_data_path)
+    ) = separate_epochs_by_stim(sub_id, processed_data_path, zscored_epochs_data_path)
 
     # Resting state
     EO_filepath = os.path.join(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
     EC_filepath = os.path.join(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
     label_ts_EO = utils.unpickle_data(EO_filepath)
     label_ts_EC = utils.unpickle_data(EC_filepath)
-
+    
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
     label_ts_all.extend([label_ts_EO, label_ts_EC])
@@ -365,14 +370,17 @@ def compute_sub_avg_con(
     fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
     # Use only label_ts from overlap of condition_dict and conditions
-    desired_conditions_ids = [v for k,v in condition_dict.items() if k in conditions]
-    desired_conditions_ids
-    
+    desired_conditions_ids = [v for k, v in condition_dict.items() if k in conditions]
     desired_label_ts = [label_ts_all[i] for i in desired_conditions_ids]
 
     # Compute connectivity for epochs
     for method in con_methods:
         for label_ts, condition in zip(desired_label_ts, conditions):
+            # Adjust for resting state 
+            if "Eyes" in condition:
+                label_ts_new = [np.array(lst) for lst in label_ts]
+                label_ts = label_ts_new 
+                
             num_epochs = len(label_ts)
             if num_epochs == 0:
                 continue
@@ -380,7 +388,7 @@ def compute_sub_avg_con(
                 table = [
                     ["Subject", sub_id],
                     ["Condition", condition],
-                    ["Num. of epochs", len(label_ts)],
+                    ["Num. of epochs", np.array(label_ts).shape[0] if "Eyes" not in condition else 1],
                     ["Band", band_name],
                     ["Method", method],
                 ]
@@ -388,19 +396,25 @@ def compute_sub_avg_con(
 
                 ## Amplitude Envelope Correlation
                 if method == "aec_pairwise":
+                    if "Eyes" in condition and np.array(label_ts).ndim < 3:
+                        label_ts_arr = np.array(label_ts)
+                        label_ts = np.expand_dims(label_ts_arr, axis=0)
                     # Compute correlation
                     corr = compute_aec(
                         "aec_pairwise", label_ts, sfreq, fmin, fmax, roi_names
                     )
                     data = corr.reshape(len(roi_names), len(roi_names))
                 elif method == "aec_symmetric":
+                    if  "Eyes" in condition and np.array(label_ts).ndim < 3:
+                        label_ts_arr = np.array(label_ts)
+                        label_ts = np.expand_dims(label_ts_arr, axis=0)
                     # Compute correlation
                     corr = compute_aec(
                         "aec_symmetric", label_ts, sfreq, fmin, fmax, roi_names
                     )
                     data = corr.reshape(len(roi_names), len(roi_names))
 
-                elif isinstance(label_ts, list) and "aec" not in method:
+                elif "Eyes" not in condition and "aec" not in method:
                     con = compute_connectivity_epochs(
                         label_ts,
                         roi_names,
@@ -415,7 +429,7 @@ def compute_sub_avg_con(
                     data = con.get_data()
                     data = data.reshape(len(roi_names), len(roi_names))
 
-                elif not isinstance(label_ts, list) and "aec" not in method:
+                elif "Eyes" in condition and "aec" not in method:
                     # Compute connectivity for resting state
                     con = compute_connectivity_resting_state(
                         label_ts,
