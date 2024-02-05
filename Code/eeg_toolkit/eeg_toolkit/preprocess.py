@@ -166,25 +166,15 @@ def to_raw(data_path, sub_id, save_path, csv_path):
             print(sub_id, save_fname_fif)
             break
 
-    eeg_data_raw_file = os.path.join(
-        data_path,
-        sub_folder,
-        next(
-            subfile
-            for subfile in os.listdir(os.path.join(data_path, sub_folder))
-            if (subfile.endswith((".edf", ".EDF")))
-        ),
-    )
-
     # read data, set EOG channel, and drop unused channels
     print(f"{sub_id}\nreading raw file...")
-    raw = load_raw_data(eeg_data_raw_file, "eog")
+    raw = load_raw_data(data_path, sub_folder, "eog")
 
     montage_fname = "../montages/Hydro_Neo_Net_64_xyz_cms_No_FID.sfp"
     Fp1_eog_flag = 0
     # 32 channel case
     if "X" in raw.ch_names and len(raw.ch_names) < 64:
-        raw = load_raw_data(eeg_data_raw_file, "Fp1")
+        raw = load_raw_data(data_path, sub_folder, "Fp1")
         Fp1_eog_flag = 1
 
         non_eeg_chs = ["X", "Y", "Z"] if "X" in raw.ch_names else []

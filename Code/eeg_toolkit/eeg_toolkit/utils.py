@@ -8,10 +8,20 @@ def clear_display():
     display.clear_output(wait=True)
 
 
-def load_raw_data(eeg_data_raw_file, eog):
+def load_raw_data(data_path, sub_folder, eog):
     """
     Load raw EDF data with specified EOG channel.
     """
+    eeg_data_raw_file = os.path.join(
+        data_path,
+        sub_folder,
+        next(
+            subfile
+            for subfile in os.listdir(os.path.join(data_path, sub_folder))
+            if (subfile.endswith((".edf", ".EDF")))
+        ),
+    )
+
     return mne.io.read_raw_edf(eeg_data_raw_file, eog=[eog], preload=True)
 
 
