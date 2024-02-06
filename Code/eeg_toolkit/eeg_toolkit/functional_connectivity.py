@@ -217,7 +217,7 @@ def bp_gen(label_ts, sfreq, fmin, fmax):
                                      sfreq, 
                                      fmin, 
                                      fmax, 
-                                    #  phase="minimum",
+                                     phase="zero-double",
                                      method="iir")
 
 

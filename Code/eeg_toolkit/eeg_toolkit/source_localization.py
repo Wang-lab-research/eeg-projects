@@ -20,7 +20,7 @@ subjects_dir = os.path.dirname(fs_dir)
 src = os.path.join(fs_dir, "bem", "fsaverage-ico-5-src.fif")  # surface for dSPM
 bem = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
 model_fname = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem.fif")
-snr = 3.0  # for inverse
+snr = 1.0  # for inverse
 
 
 def load_raw(data_path, sub_id, condition):
@@ -359,12 +359,12 @@ def to_source(
         )
 
     # If desired and epochs not yet processed, Z-score and source localize
-    print(zscored_epochs_save_path,zepochs_save_fname)
+    print(zscored_epochs_save_path, zepochs_save_fname)
     print(os.path.exists(f"{zscored_epochs_save_path}/{zepochs_save_fname}"))
     if return_zepochs:
         if not save_stc_mat and not os.path.exists(
             f"{zscored_epochs_save_path}/{zepochs_save_fname}"
-        ):            
+        ):
             print("Z-scoring epochs...")
             zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
 
@@ -385,7 +385,7 @@ def to_source(
                 save_stc_mat=save_stc_mat,
                 save_inv=True,
             )
-        if save_stc_mat: # for save mat overwrite existing folder
+        if save_stc_mat:  # for save mat overwrite existing folder
             print("Z-scoring epochs...")
             zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
 
@@ -406,7 +406,5 @@ def to_source(
                 save_stc_mat=save_stc_mat,
                 save_inv=True,
             )
-            
-
 
     return (label_ts_EO, label_ts_EC, label_ts_Epochs), sub_id_if_nan
