@@ -20,7 +20,7 @@ subjects_dir = os.path.dirname(fs_dir)
 src = os.path.join(fs_dir, "bem", "fsaverage-ico-5-src.fif")  # surface for dSPM
 bem = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
 model_fname = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem.fif")
-snr = 1.0  # for inverse
+snr = 1.0  # for non-averaged data
 
 
 def load_raw(data_path, sub_id, condition):
