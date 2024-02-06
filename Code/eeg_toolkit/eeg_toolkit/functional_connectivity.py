@@ -213,7 +213,12 @@ def bp_gen(label_ts, sfreq, fmin, fmax):
     :return: generator yielding band-pass filtered data
     """
     for ts in label_ts:
-        yield mne.filter.filter_data(ts, sfreq, fmin, fmax, phase="zero-double")
+        yield mne.filter.filter_data(ts, 
+                                     sfreq, 
+                                     fmin, 
+                                     fmax, 
+                                    #  phase="minimum",
+                                     method="iir")
 
 
 def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
