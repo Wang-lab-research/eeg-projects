@@ -359,26 +359,54 @@ def to_source(
         )
 
     # If desired and epochs not yet processed, Z-score and source localize
-    if return_zepochs and not os.path.exists(
-        f"{zscored_epochs_save_path}/{zepochs_save_fname}"
-    ):
-        zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
+    print(zscored_epochs_save_path,zepochs_save_fname)
+    print(os.path.exists(f"{zscored_epochs_save_path}/{zepochs_save_fname}"))
+    if return_zepochs:
+        if not save_stc_mat and not os.path.exists(
+            f"{zscored_epochs_save_path}/{zepochs_save_fname}"
+        ):            
+            print("Z-scoring epochs...")
+            zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
 
-        label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
-            sub_id,
-            "epochs",
-            snr,
-            trans,
-            src,
-            bem,
-            zepochs,
-            noise_cov,
-            labels,
-            zscored_epochs_save_path,
-            zepochs_save_fname,
-            average_dipoles=True,
-            save_stc_mat=save_stc_mat,
-            save_inv=True,
-        )
+            print("Source localizing epochs...")
+            label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
+                sub_id,
+                "epochs",
+                snr,
+                trans,
+                src,
+                bem,
+                zepochs,
+                noise_cov,
+                labels,
+                zscored_epochs_save_path,
+                zepochs_save_fname,
+                average_dipoles=True,
+                save_stc_mat=save_stc_mat,
+                save_inv=True,
+            )
+        if save_stc_mat: # for save mat overwrite existing folder
+            print("Z-scoring epochs...")
+            zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
+
+            print("Source localizing epochs...")
+            label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
+                sub_id,
+                "epochs",
+                snr,
+                trans,
+                src,
+                bem,
+                zepochs,
+                noise_cov,
+                labels,
+                zscored_epochs_save_path,
+                zepochs_save_fname,
+                average_dipoles=True,
+                save_stc_mat=save_stc_mat,
+                save_inv=True,
+            )
+            
+
 
     return (label_ts_EO, label_ts_EC, label_ts_Epochs), sub_id_if_nan
