@@ -213,12 +213,9 @@ def bp_gen(label_ts, sfreq, fmin, fmax):
     :return: generator yielding band-pass filtered data
     """
     for ts in label_ts:
-        yield mne.filter.filter_data(ts, 
-                                     sfreq, 
-                                     fmin, 
-                                     fmax, 
-                                     phase="zero-double",
-                                     method="iir")
+        yield mne.filter.filter_data(
+            ts, sfreq, fmin, fmax, phase="zero-double", method="iir"
+        )
 
 
 def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
@@ -242,7 +239,7 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
     print(f"label_ts shape =  {np.asarray(label_ts).shape}")
     if np.asarray(label_ts).ndim == 1:
         label_ts = [np.expand_dims(np.asarray(label_ts), axis=0)]
-    
+
     if method == "aec_pairwise":
         corr_obj = envelope_correlation(
             bp_gen(label_ts, sfreq, fmin, fmax),
@@ -365,7 +362,7 @@ def compute_sub_avg_con(
     EC_filepath = os.path.join(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
     label_ts_EO = utils.unpickle_data(EO_filepath)
     label_ts_EC = utils.unpickle_data(EC_filepath)
-    
+
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
     label_ts_all.extend([label_ts_EO, label_ts_EC])
@@ -381,11 +378,11 @@ def compute_sub_avg_con(
     # Compute connectivity for epochs
     for method in con_methods:
         for label_ts, condition in zip(desired_label_ts, conditions):
-            # Adjust for resting state 
+            # Adjust for resting state
             if "Eyes" in condition:
                 label_ts_new = [np.array(lst) for lst in label_ts]
-                label_ts = label_ts_new 
-                
+                label_ts = label_ts_new
+
             num_epochs = len(label_ts)
             if num_epochs == 0:
                 continue
@@ -393,7 +390,10 @@ def compute_sub_avg_con(
                 table = [
                     ["Subject", sub_id],
                     ["Condition", condition],
-                    ["Num. of epochs", np.array(label_ts).shape[0] if "Eyes" not in condition else 1],
+                    [
+                        "Num. of epochs",
+                        np.array(label_ts).shape[0] if "Eyes" not in condition else 1,
+                    ],
                     ["Band", band_name],
                     ["Method", method],
                 ]
@@ -410,7 +410,7 @@ def compute_sub_avg_con(
                     )
                     data = corr.reshape(len(roi_names), len(roi_names))
                 elif method == "aec_symmetric":
-                    if  "Eyes" in condition and np.array(label_ts).ndim < 3:
+                    if "Eyes" in condition and np.array(label_ts).ndim < 3:
                         label_ts_arr = np.array(label_ts)
                         label_ts = np.expand_dims(label_ts_arr, axis=0)
                     # Compute correlation
@@ -548,10 +548,16 @@ def plot_connectivity_and_stats(
     save_path,
     save_fig=True,
     highlight_pvals=True,
-    min_fc_val=-999,  # optional minimum value to highlight
+    min_fc_val=None,  # optional minimum value to highlight
     set_title=True,
     show_fc_vals=True,
+    round_neg_vals=False,
 ):
+
+    # Set min_fc_val if not provided
+    if min_fc_val is None:
+        min_fc_val = -1
+
     # Get highlight indices
     highlight_ij = []
     for i in range(len(roi_names)):
@@ -632,6 +638,11 @@ def plot_connectivity_and_stats(
         if data_idx != pval_pos:
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
+
+                    # If round_neg_vals, round negative values
+                    if round_neg_vals and data[i, j] < 0:
+                        data[i, j] == 0.0
+
                     # Ignore really low values
                     if show_fc_vals:
                         if not np.isnan(data[i, j]) and data[i, j] > min_fc_val:
