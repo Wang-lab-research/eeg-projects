@@ -208,13 +208,17 @@ def compute_fwd_and_inv(
     Returns:
         None
     """
-    # Check if files already saved
-    sub_save_path = os.path.join(save_path, sub_id)
-    if not os.path.exists(sub_save_path):
-        os.makedirs(sub_save_path)
+    # Check if files already saved. Check already in place for regular save to pkl
+    sub_done = False
+    if save_stc_mat:
+        sub_save_path = os.path.join(save_path, sub_id)
+        if not os.path.exists(sub_save_path):
+            os.makedirs(sub_save_path)
+        if len(os.listdir(sub_save_path)) >= len(labels):
+            sub_done = True     
 
     label_ts, sub_id_if_nan = None, None  # Initialize variables
-    if len(os.listdir(sub_save_path)) < len(labels):
+    if not sub_done:
         fwd = mne.make_forward_solution(
             mne_object.info,
             trans=trans,
@@ -334,7 +338,7 @@ def to_source(
             EO_save_fname,
             average_dipoles=True,
             save_stc_mat=save_stc_mat,
-            save_inv=True,
+            save_inv=save_inv,
         )
 
     # If desired and eyes closed resting data not yet processed, process it
@@ -355,7 +359,7 @@ def to_source(
             EC_save_fname,
             average_dipoles=True,
             save_stc_mat=save_stc_mat,
-            save_inv=True,
+            save_inv=save_inv,
         )
 
     # If desired and epochs not yet processed, Z-score and source localize
@@ -383,7 +387,7 @@ def to_source(
                 zepochs_save_fname,
                 average_dipoles=True,
                 save_stc_mat=save_stc_mat,
-                save_inv=True,
+                save_inv=save_inv,
             )
         if save_stc_mat:  # for save mat overwrite existing folder
             print("Z-scoring epochs...")
@@ -404,7 +408,7 @@ def to_source(
                 zepochs_save_fname,
                 average_dipoles=True,
                 save_stc_mat=save_stc_mat,
-                save_inv=True,
+                save_inv=save_inv,
             )
 
     return (label_ts_EO, label_ts_EC, label_ts_Epochs), sub_id_if_nan
