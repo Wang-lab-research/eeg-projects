@@ -234,8 +234,8 @@ def compute_fwd_and_inv(
         inverse_operator = mne.minimum_norm.make_inverse_operator(
             mne_object.info, fwd, noise_cov, verbose=True
         )
-        # Save inverse operator
-        if save_inv:
+        # Save inverse operator for just one of the data types, make it the epochs
+        if save_inv and isinstance(label_ts, list):
             utils.pickle_data(save_path, f"{sub_id}_inv.pkl", inverse_operator)
 
         label_ts, sub_id_if_nan = apply_inverse_and_save(
