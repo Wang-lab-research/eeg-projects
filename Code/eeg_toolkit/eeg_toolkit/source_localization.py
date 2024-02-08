@@ -88,6 +88,7 @@ def apply_inverse_and_save(
     save_fname,
     sub_id,
     condition,
+    method,
     average_dipoles=True,
     save_stc_mat=False,
 ):
@@ -115,12 +116,12 @@ def apply_inverse_and_save(
     if isinstance(mne_object, mne.io.fiff.raw.Raw):
         print("Applying inverse to Raw object")
         stc = mne.minimum_norm.apply_inverse_raw(
-            mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
+            mne_object, inverse_operator, method=method, **apply_inverse_and_save_kwargs
         )
     elif isinstance(mne_object, mne.epochs.EpochsArray):
         print("Applying inverse to Epochs object")
         stc = mne.minimum_norm.apply_inverse_epochs(
-            mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
+            mne_object, inverse_operator, method=method, **apply_inverse_and_save_kwargs
         )
     else:
         raise ValueError("Invalid mne_object type")
@@ -144,16 +145,11 @@ def apply_inverse_and_save(
 
         for i in range(len(labels)):
             print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
-            label_ts_i = label_ts[i, :, :]
+            label_ts_i = label_ts[:, i, :]
             print("*label_ts_i shape = ", label_ts_i.shape)
-            stc = mne.labels_to_stc(labels, label_ts_i, src=src)
-
-            stc_data = stc.data  # [epoch.data for epoch in stc]
-            # Turn into 3D array
-            stc_arr = np.array(stc_data)
-
+            
             # Save STC Zepochs per region
-            matfiledata = {"data": stc_arr}
+            matfiledata = {"data": label_ts_i}
             save_fname = f"{labels[i].name}_{condition}.mat"
             # hdf5storage.write(
             #     matfiledata,
@@ -185,6 +181,7 @@ def compute_fwd_and_inv(
     labels,
     save_path,
     save_fname,
+    method,
     average_dipoles=True,
     save_stc_mat=False,
     save_inv=True,
@@ -215,7 +212,7 @@ def compute_fwd_and_inv(
         if not os.path.exists(sub_save_path):
             os.makedirs(sub_save_path)
         if len(os.listdir(sub_save_path)) >= len(labels):
-            sub_done = True     
+            sub_done = True
 
     label_ts, sub_id_if_nan = None, None  # Initialize variables
     if not sub_done:
@@ -246,6 +243,7 @@ def compute_fwd_and_inv(
             save_fname,
             sub_id,
             condition,
+            method=method,
             average_dipoles=True,
             save_stc_mat=save_stc_mat,
         )
@@ -262,6 +260,7 @@ def to_source(
     EO_resting_save_path,
     roi_names,
     times_tup,
+    method,
     return_zepochs=True,
     return_EC_resting=False,
     return_EO_resting=False,
@@ -336,6 +335,7 @@ def to_source(
             labels,
             EO_resting_save_path,
             EO_save_fname,
+            method=method,
             average_dipoles=True,
             save_stc_mat=save_stc_mat,
             save_inv=save_inv,
@@ -357,14 +357,13 @@ def to_source(
             labels,
             EC_resting_save_path,
             EC_save_fname,
+            method=method,
             average_dipoles=True,
             save_stc_mat=save_stc_mat,
             save_inv=save_inv,
         )
 
     # If desired and epochs not yet processed, Z-score and source localize
-    print(zscored_epochs_save_path, zepochs_save_fname)
-    print(os.path.exists(f"{zscored_epochs_save_path}/{zepochs_save_fname}"))
     if return_zepochs:
         if not save_stc_mat and not os.path.exists(
             f"{zscored_epochs_save_path}/{zepochs_save_fname}"
@@ -385,11 +384,15 @@ def to_source(
                 labels,
                 zscored_epochs_save_path,
                 zepochs_save_fname,
+                method=method,
                 average_dipoles=True,
                 save_stc_mat=save_stc_mat,
                 save_inv=save_inv,
             )
         if save_stc_mat:  # for save mat overwrite existing folder
+            print(zscored_epochs_save_path, zepochs_save_fname)
+            print(os.path.exists(f"{zscored_epochs_save_path}/{zepochs_save_fname}"))
+
             print("Z-scoring epochs...")
             zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
 
@@ -406,9 +409,10 @@ def to_source(
                 labels,
                 zscored_epochs_save_path,
                 zepochs_save_fname,
+                method=method,
                 average_dipoles=True,
                 save_stc_mat=save_stc_mat,
                 save_inv=save_inv,
             )
 
-    return (label_ts_EO, label_ts_EC, label_ts_Epochs), sub_id_if_nan
+    return (label_ts_Epochs, label_ts_EO, label_ts_EC), sub_id_if_nan
