@@ -8,10 +8,15 @@ def clear_display():
     display.clear_output(wait=True)
 
 
-def load_raw_data(data_path, sub_folder, eog):
+def load_raw_data(data_path, sub_id, eog):
     """
     Load raw EDF data with specified EOG channel.
     """
+    sub_folder = next(
+            sub_folder
+            for sub_folder in os.listdir(os.path.join(data_path))
+            if (sub_folder.startswith(sub_id))
+        )
     eeg_data_raw_file = os.path.join(
         data_path,
         sub_folder,
