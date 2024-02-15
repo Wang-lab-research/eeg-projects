@@ -2,8 +2,6 @@ from .utils import clear_display, set_montage, load_raw_data
 import os
 import numpy as np
 import mne
-import os
-import mne
 import pandas as pd
 from mne.preprocessing import ICA
 from pyprep.find_noisy_channels import NoisyChannels
@@ -244,11 +242,11 @@ def to_raw(data_path, sub_id, save_path, csv_path):
         wrong_64_mtg_flag = 0
         if {"FT7", "P05"}.issubset(set(raw.ch_names)):
             wrong_64_mtg_flag = 1
-            eog_adj = 4
+            # eog_adj = 4
         elif "VEO" in raw.ch_names or "VEOG" in raw.ch_names:
-            eog_adj = 5
+            # eog_adj = 5
             raw = load_raw_data(
-                eeg_data_raw_file, "VEO" if "VEO" in raw.ch_names else "VEOG"
+                data_path, sub_folder, "VEO" if "VEO" in raw.ch_names else "VEOG"
             )
             # replace VEO with EOG
             raw.rename_channels({"VEO" if "VEO" in raw.ch_names else "VEOG": "EOG"})
@@ -439,13 +437,13 @@ def to_epo(raw, sub_id, data_path, save_path):
     ):
         for i in range(len(epochs) - 1):
             # current epoch
-            pre_curr_pos = val_list.index(
-                events_from_annot_drop_repeats_list[i - 1][-1]
-            )  # get position of epoch description value
-            pre_curr_key_str = key_list[
-                pre_curr_pos
-            ]  # get key at position (e.g., 'Yes Pain Hand')
-            pre_curr_val = val_list[pre_curr_pos]
+            # pre_curr_pos = val_list.index(
+            #     events_from_annot_drop_repeats_list[i - 1][-1]
+            # )  # get position of epoch description value
+            # pre_curr_key_str = key_list[
+                # pre_curr_pos
+            # ]  # get key at position (e.g., 'Yes Pain Hand')
+            # pre_curr_val = val_list[pre_curr_pos]
 
             curr_pos = val_list.index(
                 events_from_annot_drop_repeats_list[i][-1]
@@ -477,7 +475,7 @@ def to_epo(raw, sub_id, data_path, save_path):
                         )
                         * SAMPS_TO_MS
                     )
-                    # print(next_key_str)
+                    print(next_key_str)
 
                 # check whether there are any pinprick keys_from_annot missing for some of the key presses
                 elif (curr_val in range(3, 9)) and (next_val not in range(10, 14)):
@@ -488,7 +486,7 @@ def to_epo(raw, sub_id, data_path, save_path):
                     key_wo_pp_samps_to_ms.append(
                         events_from_annot_drop_repeats_list[i][0] * SAMPS_TO_MS
                     )
-                    # print(next_key_str)
+                    print(next_key_str)
 
             # for paradigms with NS and HS, no LS. Key presses but no pinprick keys_from_annot
             elif 10 not in val_list or 12 not in val_list:
@@ -660,7 +658,6 @@ def to_epo(raw, sub_id, data_path, save_path):
         "100048": 11,  # lesser weight pen tip up
         "1100001": 12,
         "100320": 12,
-        "1000000": 12,  # greater weight pen tip down
         "1100010": 13,  # greater weight pen tip up
     }
 
@@ -731,7 +728,6 @@ def to_epo(raw, sub_id, data_path, save_path):
         "1000001": 10,
         "100160": 10,
         "100480": 10,
-        "1000000": 10,  # lesser weight pen tip down
         "1000010": 11,
         "100048": 11,  # lesser weight pen tip up
         "1100001": 12,
