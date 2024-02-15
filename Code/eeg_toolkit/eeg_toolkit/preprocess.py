@@ -209,7 +209,7 @@ def to_raw(data_path, sub_id, save_path, csv_path):
 
     # read data, set EOG channel, and drop unused channels
     print(f"{sub_id}\nreading raw file...")
-    raw = load_raw_data(data_path, sub_folder, "eog")
+    raw = load_raw_data(data_path, sub_folder, "EOG")
     sfreq = raw.info["sfreq"]
     # Assuming `raw`, `sub_id`, and `raw_sfreq` are already defined:
     raw_cropped, was_cropped = remove_trailing_zeros(raw, sub_id, sfreq)
@@ -226,7 +226,10 @@ def to_raw(data_path, sub_id, save_path, csv_path):
     # 32 channel case
     if "X" in raw.ch_names and len(raw.ch_names) < 64:
         raw = load_raw_data(data_path, sub_folder, "Fp1")
-        
+
+        # replace with EOG
+        raw.rename_channels({"Fp1": "EOG"})
+
         Fp1_eog_flag = 1
 
         non_eeg_chs = ["X", "Y", "Z"] if "X" in raw.ch_names else []
@@ -247,6 +250,9 @@ def to_raw(data_path, sub_id, save_path, csv_path):
             raw = load_raw_data(
                 eeg_data_raw_file, "VEO" if "VEO" in raw.ch_names else "VEOG"
             )
+            # replace VEO with EOG
+            raw.rename_channels({"VEO" if "VEO" in raw.ch_names else "VEOG": "EOG"})
+
             non_eeg_chs = (
                 ["HEOG", "EKG", "EMG", "Trigger"]
                 if "HEOG" in raw.ch_names
