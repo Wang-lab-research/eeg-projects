@@ -159,6 +159,8 @@ def compute_connectivity_epochs(
         sfreq=sfreq,
         fmin=fmin,
         fmax=fmax,
+        tmin=tmin,
+        tmax=tmax,
         faverage=True,
         mt_adaptive=True,
         n_jobs=1,
@@ -173,8 +175,6 @@ def compute_connectivity_resting_state(
     method,
     fmin,
     fmax,
-    tmin,
-    tmax,
     sfreq,
 ):
     # Change shape of resting state label_ts to 3-d for compatibility
@@ -388,8 +388,8 @@ def compute_sub_avg_con(
                 print(
                     f"Skipping {method} {condition} for {sub_id} due to NaN values in label_ts."
                 )
-                continue   
-            
+                continue
+
             num_epochs = len(label_ts)
             if num_epochs == 0:
                 continue
@@ -449,8 +449,6 @@ def compute_sub_avg_con(
                         method,
                         fmin,
                         fmax,
-                        tmin,
-                        tmax,
                         sfreq,
                     )
                     # reshape to roi x roi
@@ -855,7 +853,7 @@ def plot_connectivity_circle(
         node_angles=node_angles,
         node_colors=node_colors,
         textcolor="black",
-        colormap='viridis',
+        colormap="viridis",
         fontsize_names=8,
         vmin=vmin,
         vmax=vmax,
