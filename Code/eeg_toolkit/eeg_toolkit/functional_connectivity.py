@@ -138,7 +138,7 @@ def separate_epochs_by_stim(
         if include_LS
         else (back_NS_ratings, back_HS_ratings)
     )
-
+            
     return hand_all_label_ts, back_all_label_ts, hand_all_ratings, back_all_ratings
 
 
@@ -202,7 +202,14 @@ def compute_connectivity_resting_state(
     return con
 
 
-def bp_gen(label_ts, sfreq, fmin, fmax):
+def bp_gen(
+    label_ts,
+    sfreq,
+    fmin,
+    fmax,
+    tmin,
+    tmax,
+):
     """
     Generate band-pass filtered data using MNE library.
 
@@ -213,12 +220,16 @@ def bp_gen(label_ts, sfreq, fmin, fmax):
     :return: generator yielding band-pass filtered data
     """
     for ts in label_ts:
+        # crop the data between tmin and tmax
+        ts = ts[...,int(np.round(tmin*sfreq)):int(np.round(tmax*sfreq))] 
+
+        print(f"ts shape = {ts.shape}")
         yield mne.filter.filter_data(
             ts, sfreq, fmin, fmax, phase="zero-double", method="iir"
         )
 
 
-def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
+def compute_aec(method, label_ts, sfreq, fmin, fmax, tmin, tmax, roi_names):
     """
     Compute the correlation between regions of interest (ROIs) using different methods.
 
@@ -242,7 +253,7 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
 
     if method == "aec_pairwise":
         corr_obj = envelope_correlation(
-            bp_gen(label_ts, sfreq, fmin, fmax),
+            bp_gen(label_ts, sfreq, fmin, fmax, tmin, tmax),
             orthogonalize="pairwise",
         )
         corr = corr_obj.combine()
@@ -250,7 +261,7 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, roi_names):
     if method == "aec_symmetric":
         label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
         corr_obj = envelope_correlation(
-            bp_gen(label_ts_orth, sfreq, fmin, fmax), orthogonalize=False
+            bp_gen(label_ts_orth, sfreq, fmin, fmax, tmin, tmax), orthogonalize=False
         )
         corr = corr_obj.combine()
         corr = corr.get_data(output="dense")[:, :, 0]
@@ -413,7 +424,7 @@ def compute_sub_avg_con(
                         label_ts = np.expand_dims(label_ts_arr, axis=0)
                     # Compute correlation
                     corr = compute_aec(
-                        "aec_pairwise", label_ts, sfreq, fmin, fmax, roi_names
+                        "aec_pairwise", label_ts, sfreq, fmin, fmax, tmin=tmin, tmax=tmax, roi_names=roi_names,
                     )
                     data = corr.reshape(len(roi_names), len(roi_names))
                 elif method == "aec_symmetric":
@@ -422,7 +433,7 @@ def compute_sub_avg_con(
                         label_ts = np.expand_dims(label_ts_arr, axis=0)
                     # Compute correlation
                     corr = compute_aec(
-                        "aec_symmetric", label_ts, sfreq, fmin, fmax, roi_names
+                        "aec_symmetric", label_ts, sfreq, fmin, fmax, tmin=tmin, tmax=tmax, roi_names=roi_names,
                     )
                     data = corr.reshape(len(roi_names), len(roi_names))
 
