@@ -34,7 +34,7 @@ def load_raw(data_path, sub_id, condition):
     return raw
 
 
-def zscore_epochs(sub_id, data_path, tmin, tmax, raw):
+def zscore_epochs(sub_id, data_path, tmin, raw):
     """
     Calculate the z-scores for each epoch in the given EEG dataset.
 
@@ -71,7 +71,6 @@ def zscore_epochs(sub_id, data_path, tmin, tmax, raw):
         data_zepo,
         info=epochs.info,
         tmin=tmin,
-        tmax=tmax,
         on_missing="ignore",
         event_id=epochs.event_id,
         events=epochs.events,
@@ -370,9 +369,9 @@ def to_source(
             f"{zscored_epochs_save_path}/{zepochs_save_fname}"
         ):
             print("Z-scoring epochs...")
-            zepochs = zscore_epochs(sub_id, data_path, tmin, tmax, raw)
+            zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
             # print shape of zepochs
-            print(zepochs.shape)
+            print(zepochs.get_data().shape)
             
             print("Source localizing epochs...")
             label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
@@ -397,10 +396,9 @@ def to_source(
             print(os.path.exists(f"{zscored_epochs_save_path}/{zepochs_save_fname}"))
 
             print("Z-scoring epochs...")
-            zepochs = zscore_epochs(sub_id, data_path, tmin, tmax, raw)
+            zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
             # print shape of zepochs
-            print(zepochs.shape)
-            
+            print(zepochs.get_data().shape)
             
             print("Source localizing epochs...")
             label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(

@@ -547,6 +547,172 @@ def get_method_plot_name(method):
     return method_dict.get(method, method.upper())
 
 
+
+def plot_connectivity_circle(
+    data,
+    method,
+    band,
+    roi_names,
+    roi_acronyms,
+    condition,
+    group_name,
+    num_epochs,
+    save_path,
+    title_prefix=None,
+    save_fig=False,
+):
+    """
+    Plot the connectivity circle for the given connectivity data.
+
+    Args:
+        data (numpy.ndarray): The connectivity data.
+        method (str): The method used for connectivity estimation.
+        band (str): The frequency band used for connectivity estimation.
+        roi_names (list): The names of the regions of interest.
+        group_name (str): The name of the group.
+        condition (str): The condition of the data.
+        num_epochs (int): The number of epochs.
+        save_path (str): The path to save the plot.
+
+    Returns:
+        None
+    """
+    # Convert ROI names to labels
+    labels = [
+        mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
+        for roi in roi_names
+    ]
+    # read colors
+    node_colors = [label.color for label in labels]
+
+    # We reorder the labels based on their location in the left hemi
+    label_names = [roi for roi in roi_acronyms]
+    lh_labels = [name for name in label_names if name.endswith("lh")]
+    rh_labels = [name for name in label_names if name.endswith("rh")]
+
+    # Get the y-location of the label
+    label_ypos_lh = list()
+    for name in lh_labels:
+        data_idx = label_names.index(name)
+        ypos = np.mean(labels[data_idx].pos[:, 1])
+        label_ypos_lh.append(ypos)
+    try:
+        data_idx = label_names.index("Brain-Stem")
+    except ValueError:
+        pass
+    else:
+        ypos = np.mean(labels[data_idx].pos[:, 1])
+        lh_labels.append("Brain-Stem")
+        label_ypos_lh.append(ypos)
+
+    # Reorder the labels based on their location
+    lh_labels = [label for (yp, label) in sorted(zip(label_ypos_lh, lh_labels))]
+
+    # For the right hemi
+    rh_labels = [
+        label[:-2] + "rh"
+        for label in lh_labels
+        if label != "Brain-Stem" and label[:-2] + "rh" in rh_labels
+    ]
+
+    # Save the plot order
+    node_order = lh_labels[::-1] + rh_labels
+
+    node_angles = mne.viz.circular_layout(
+        label_names,
+        node_order,
+        start_pos=90,
+        group_boundaries=[0, len(label_names) // 2],
+    )
+
+    # Plot parameters
+    vmin, vmax = (0.0, 0.7) if method == "dwpli" else (None, None)
+    vmin, vmax = (0.0, 0.5) if method == "dpli" else (None, None)
+
+    fig, ax = plt.subplots(
+        figsize=(10, 8), facecolor="white", subplot_kw=dict(polar=True)
+    )
+
+    mne_conn.viz.plot_connectivity_circle(
+        data,
+        roi_names,
+        title=f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)",
+        node_edgecolor="white",
+        node_angles=node_angles,
+        node_colors=node_colors,
+        textcolor="black",
+        colormap="viridis",
+        fontsize_names=8,
+        vmin=vmin,
+        vmax=vmax,
+        ax=ax,
+    )
+
+    # Save figure
+    if save_fig:
+        fig.tight_layout()
+        filename = f"circle_{group_name}_{condition}_{band}_{method}.png"
+        fig.savefig(
+            os.path.join(save_path, filename),
+            facecolor=fig.get_facecolor(),
+            bbox_inches="tight",
+            dpi=300,
+        )
+    plt.show()
+    plt.close()
+
+
+def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
+    """
+    Perform Mann-Whitney U test on group1_stack and group2_stack for each ROI combination.
+    Calculate p-values, means, and standard error of the mean.
+    Args:
+        group1_stack: 3D array of data for group 1
+        group2_stack: 3D array of data for group 2
+        roi_names: List of names for the regions of interest
+        method: Method for adjusting the data (default is None)
+    Returns:
+        p_values: Array of p-values for each ROI combination
+        means_1: Means of group 1 data for each ROI combination
+        sem_1: Standard error of the mean of group 1 data for each ROI combination
+        means_2: Means of group 2 data for each ROI combination
+        sem_2: Standard error of the mean of group 2 data for each ROI combination
+    """
+    n = len(roi_names)
+    p_values = np.zeros((n, n))
+    means_1 = np.zeros((n, n))
+    means_2 = np.zeros((n, n))
+    sem_1 = np.zeros((n, n))
+    sem_2 = np.zeros((n, n))
+
+    for i in range(n):
+        for j in range(n):
+            # Perform Mann-Whitney U test
+            data1 = group1_stack[:, i, j]
+            data2 = group2_stack[:, i, j]
+
+            # If method is 'dpli', adjust data
+            if method == "dpli":
+                data1_tmp = np.abs(data1 - 0.5)
+                data2_tmp = np.abs(data2 - 0.5)
+
+                u, p = stats.mannwhitneyu(data1_tmp, data2_tmp)
+                p_values[i, j] = p
+            else:
+                u, p = stats.mannwhitneyu(data1, data2)
+                p_values[i, j] = p
+
+            # Calculate means
+            means_1[i, j] = np.mean(data1)
+            means_2[i, j] = np.mean(data2)
+
+            # Calculate SEM
+            sem_1[i, j] = stats.sem(data1)
+            sem_2[i, j] = stats.sem(data2)
+
+    return p_values, means_1, sem_1, means_2, sem_2
+
+
 def plot_connectivity_and_stats(
     means_1,
     means_2,
@@ -564,7 +730,8 @@ def plot_connectivity_and_stats(
     save_path,
     save_fig=True,
     highlight_pvals=True,
-    min_fc_val=None,  # optional minimum value to highlight
+    show_only_significant=True,
+    min_fc_val=None, # optional minimum value to highlight
     set_title=True,
     show_fc_vals=True,
     round_neg_vals=False,
@@ -728,156 +895,18 @@ def plot_connectivity_and_stats(
         for j in range(i, len(roi_names)):
             data[i, j] = np.nan
 
+    # If showing only significant values, make them appear white
+    if show_only_significant:
+        for i in range(len(roi_names)):
+            for j in range(len(roi_names)):
+                if p_values[i, j] >= 0.05:
+                    data[i, j] = np.nan
+                    p_values[i, j] = np.nan
+
+
     filename = f"{condition}_{band}_{method}.png"
     if save_fig:
         fig.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
     plt.show()
     plt.close()
 
-
-def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
-    n = len(roi_names)
-    p_values = np.zeros((n, n))
-    means_1 = np.zeros((n, n))
-    means_2 = np.zeros((n, n))
-    sem_1 = np.zeros((n, n))
-    sem_2 = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(n):
-            # Perform Mann-Whitney U test
-            data1 = group1_stack[:, i, j]
-            data2 = group2_stack[:, i, j]
-
-            # If method is 'dpli', adjust data
-            if method == "dpli":
-                data1_tmp = np.abs(data1 - 0.5)
-                data2_tmp = np.abs(data2 - 0.5)
-
-                u, p = stats.mannwhitneyu(data1_tmp, data2_tmp)
-                p_values[i, j] = p
-            else:
-                u, p = stats.mannwhitneyu(data1, data2)
-                p_values[i, j] = p
-
-            # Calculate means
-            means_1[i, j] = np.mean(data1)
-            means_2[i, j] = np.mean(data2)
-
-            # Calculate SEM
-            sem_1[i, j] = stats.sem(data1)
-            sem_2[i, j] = stats.sem(data2)
-
-    return p_values, means_1, sem_1, means_2, sem_2
-
-
-def plot_connectivity_circle(
-    data,
-    method,
-    band,
-    roi_names,
-    roi_acronyms,
-    condition,
-    group_name,
-    num_epochs,
-    save_path,
-    title_prefix=None,
-    save_fig=False,
-):
-    """
-    Plot the connectivity circle for the given connectivity data.
-
-    Args:
-        data (numpy.ndarray): The connectivity data.
-        method (str): The method used for connectivity estimation.
-        band (str): The frequency band used for connectivity estimation.
-        roi_names (list): The names of the regions of interest.
-        group_name (str): The name of the group.
-        condition (str): The condition of the data.
-        num_epochs (int): The number of epochs.
-        save_path (str): The path to save the plot.
-
-    Returns:
-        None
-    """
-    # Convert ROI names to labels
-    labels = [
-        mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
-        for roi in roi_names
-    ]
-    # read colors
-    node_colors = [label.color for label in labels]
-
-    # We reorder the labels based on their location in the left hemi
-    label_names = [roi for roi in roi_acronyms]
-    lh_labels = [name for name in label_names if name.endswith("lh")]
-    rh_labels = [name for name in label_names if name.endswith("rh")]
-
-    # Get the y-location of the label
-    label_ypos_lh = list()
-    for name in lh_labels:
-        data_idx = label_names.index(name)
-        ypos = np.mean(labels[data_idx].pos[:, 1])
-        label_ypos_lh.append(ypos)
-    try:
-        data_idx = label_names.index("Brain-Stem")
-    except ValueError:
-        pass
-    else:
-        ypos = np.mean(labels[data_idx].pos[:, 1])
-        lh_labels.append("Brain-Stem")
-        label_ypos_lh.append(ypos)
-
-    # Reorder the labels based on their location
-    lh_labels = [label for (yp, label) in sorted(zip(label_ypos_lh, lh_labels))]
-
-    # For the right hemi
-    rh_labels = [
-        label[:-2] + "rh"
-        for label in lh_labels
-        if label != "Brain-Stem" and label[:-2] + "rh" in rh_labels
-    ]
-
-    # Save the plot order
-    node_order = lh_labels[::-1] + rh_labels
-
-    node_angles = mne.viz.circular_layout(
-        label_names,
-        node_order,
-        start_pos=90,
-        group_boundaries=[0, len(label_names) // 2],
-    )
-
-    # Plot parameters
-    vmin, vmax = (0.0, 0.7) if method == "dwpli" else (None, None)
-    vmin, vmax = (0.0, 0.5) if method == "dpli" else (None, None)
-
-    fig, ax = plt.subplots(
-        figsize=(10, 8), facecolor="white", subplot_kw=dict(polar=True)
-    )
-
-    mne_conn.viz.plot_connectivity_circle(
-        data,
-        roi_names,
-        title=f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)",
-        node_edgecolor="white",
-        node_angles=node_angles,
-        node_colors=node_colors,
-        textcolor="black",
-        colormap="viridis",
-        fontsize_names=8,
-        vmin=vmin,
-        vmax=vmax,
-        ax=ax,
-    )
-    fig.tight_layout()
-    filename = f"circle_{group_name}_{condition}_{band}_{method}.png"
-    if save_fig:
-        fig.savefig(
-            os.path.join(save_path, filename),
-            facecolor=fig.get_facecolor(),
-            bbox_inches="tight",
-            dpi=300,
-        )
-    plt.show()
-    plt.close()
