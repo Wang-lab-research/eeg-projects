@@ -99,7 +99,7 @@ def separate_epochs_by_stim(
     ##############################################################################################
     # Load in label time courses and separate epochs by stimulus
 
-    label_ts = utils.unpickle_data(stc_data_path / f"{sub_id}_epochs.pkl")
+    label_ts = utils.unpickle_data(stc_data_path, f"{sub_id}_epochs.pkl")
     hand_NS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_NS_labels]
     hand_HS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_HS_labels]
 
@@ -138,7 +138,7 @@ def separate_epochs_by_stim(
         if include_LS
         else (back_NS_ratings, back_HS_ratings)
     )
-            
+
     return hand_all_label_ts, back_all_label_ts, hand_all_ratings, back_all_ratings
 
 
@@ -221,7 +221,7 @@ def bp_gen(
     """
     for ts in label_ts:
         # crop the data between tmin and tmax
-        ts = ts[...,int(np.round(tmin*sfreq)):int(np.round(tmax*sfreq))] 
+        ts = ts[..., int(np.round(tmin * sfreq)) : int(np.round(tmax * sfreq))]
 
         print(f"ts shape = {ts.shape}")
         yield mne.filter.filter_data(
@@ -369,10 +369,8 @@ def compute_sub_avg_con(
     ) = separate_epochs_by_stim(sub_id, processed_data_path, zscored_epochs_data_path)
 
     # Resting state
-    EO_filepath = os.path.join(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
-    EC_filepath = os.path.join(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
-    label_ts_EO = utils.unpickle_data(EO_filepath)
-    label_ts_EC = utils.unpickle_data(EC_filepath)
+    label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
+    label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
 
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
@@ -424,7 +422,14 @@ def compute_sub_avg_con(
                         label_ts = np.expand_dims(label_ts_arr, axis=0)
                     # Compute correlation
                     corr = compute_aec(
-                        "aec_pairwise", label_ts, sfreq, fmin, fmax, tmin=tmin, tmax=tmax, roi_names=roi_names,
+                        "aec_pairwise",
+                        label_ts,
+                        sfreq,
+                        fmin,
+                        fmax,
+                        tmin=tmin,
+                        tmax=tmax,
+                        roi_names=roi_names,
                     )
                     data = corr.reshape(len(roi_names), len(roi_names))
                 elif method == "aec_symmetric":
@@ -433,7 +438,14 @@ def compute_sub_avg_con(
                         label_ts = np.expand_dims(label_ts_arr, axis=0)
                     # Compute correlation
                     corr = compute_aec(
-                        "aec_symmetric", label_ts, sfreq, fmin, fmax, tmin=tmin, tmax=tmax, roi_names=roi_names,
+                        "aec_symmetric",
+                        label_ts,
+                        sfreq,
+                        fmin,
+                        fmax,
+                        tmin=tmin,
+                        tmax=tmax,
+                        roi_names=roi_names,
                     )
                     data = corr.reshape(len(roi_names), len(roi_names))
 
@@ -547,7 +559,6 @@ def get_method_plot_name(method):
     return method_dict.get(method, method.upper())
 
 
-
 def plot_connectivity_circle(
     data,
     method,
@@ -555,9 +566,12 @@ def plot_connectivity_circle(
     roi_names,
     roi_acronyms,
     condition,
-    group_name,
-    num_epochs,
     save_path,
+    vmin=None,
+    vmax=None,
+    fig=None,
+    subplot=None,
+    colormap="YlGnBu",
     title_prefix=None,
     save_fig=False,
 ):
@@ -579,14 +593,15 @@ def plot_connectivity_circle(
     """
     # Convert ROI names to labels
     labels = [
-        mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir)[0]
+        mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir,verbose=False)[0]
         for roi in roi_names
     ]
     # read colors
     node_colors = [label.color for label in labels]
 
     # We reorder the labels based on their location in the left hemi
-    label_names = [roi for roi in roi_acronyms]
+    # label_names = [label.name for label in labels]
+    label_names = roi_acronyms
     lh_labels = [name for name in label_names if name.endswith("lh")]
     rh_labels = [name for name in label_names if name.endswith("rh")]
 
@@ -618,6 +633,7 @@ def plot_connectivity_circle(
     # Save the plot order
     node_order = lh_labels[::-1] + rh_labels
 
+    # Circular layout    
     node_angles = mne.viz.circular_layout(
         label_names,
         node_order,
@@ -628,41 +644,45 @@ def plot_connectivity_circle(
     # Plot parameters
     vmin, vmax = (0.0, 0.7) if method == "dwpli" else (None, None)
     vmin, vmax = (0.0, 0.5) if method == "dpli" else (None, None)
+    vmin, vmax = (-1.0, 1.0) if 'aec' in method else (None, None)
 
-    fig, ax = plt.subplots(
-        figsize=(10, 8), facecolor="white", subplot_kw=dict(polar=True)
-    )
 
     mne_conn.viz.plot_connectivity_circle(
         data,
-        roi_names,
-        title=f"{title_prefix} - {band} band ({method} method, {num_epochs} trials)",
+        roi_acronyms,
         node_edgecolor="white",
         node_angles=node_angles,
         node_colors=node_colors,
         textcolor="black",
-        colormap="viridis",
+        facecolor="white",
+        colormap=colormap,
         fontsize_names=8,
         vmin=vmin,
         vmax=vmax,
-        ax=ax,
+        fig=fig,
+        subplot=subplot,
+        show=False,
     )
 
     # Save figure
     if save_fig:
         fig.tight_layout()
-        filename = f"circle_{group_name}_{condition}_{band}_{method}.png"
+        filename = f"circle_{condition}_{band}_{method}.png"
         fig.savefig(
             os.path.join(save_path, filename),
             facecolor=fig.get_facecolor(),
             bbox_inches="tight",
             dpi=300,
         )
-    plt.show()
-    plt.close()
+    # plt.show()
+    # plt.close()
 
-
-def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
+def mann_whitney_test(
+    group1_stack, 
+    group2_stack,
+    roi_names,
+    round_neg_vals=True,
+    method=None):
     """
     Perform Mann-Whitney U test on group1_stack and group2_stack for each ROI combination.
     Calculate p-values, means, and standard error of the mean.
@@ -690,6 +710,11 @@ def mann_whitney_test(group1_stack, group2_stack, roi_names, method=None):
             # Perform Mann-Whitney U test
             data1 = group1_stack[:, i, j]
             data2 = group2_stack[:, i, j]
+
+            # Round negative values
+            if round_neg_vals:
+                data1[data1 < 0] = 0
+                data2[data2 < 0] = 0
 
             # If method is 'dpli', adjust data
             if method == "dpli":
@@ -728,10 +753,13 @@ def plot_connectivity_and_stats(
     titles,
     save_names,
     save_path,
+    fig=None,
+    subplot=None,
+    roi_acronyms=None,
     save_fig=True,
     highlight_pvals=True,
     show_only_significant=True,
-    min_fc_val=None, # optional minimum value to highlight
+    min_fc_val=None,  # optional minimum value to highlight
     set_title=True,
     show_fc_vals=True,
     round_neg_vals=False,
@@ -766,7 +794,7 @@ def plot_connectivity_and_stats(
     header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
     table = []
     for region_pair in highlight_ij:
-        roi_pair = f"{roi_names[region_pair[0]]} <-> {roi_names[region_pair[1]]}"
+        roi_pair = f"{roi_acronyms[region_pair[0]]} <-> {roi_acronyms[region_pair[1]]}"
         p_val = np.round(p_values[region_pair[0], region_pair[1]], 3)
         mean_sem_1 = f"{np.round(means_1[region_pair[0], region_pair[1]],3)} ± {np.round(sem_1[region_pair[0], region_pair[1]],3)}"
         mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
@@ -774,6 +802,9 @@ def plot_connectivity_and_stats(
         table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
     print(tabulate(table, headers=header, tablefmt="pretty"))
 
+    # Choose the colormap 
+    colormap = "YlGnBu"
+    
     # Loop through means and p values for plotting
     for data_idx, data, ax in zip(
         range(3),
@@ -807,15 +838,27 @@ def plot_connectivity_and_stats(
                 (vzero, vzero + vthresh) if data_idx != pval_pos else (0.0, 1.0)
             )
 
-        cmap = matplotlib.cm.viridis
-
-        # # Make top-right diagonal and above white
-        # for i in range(len(roi_names)):
-        #     for j in range(i, len(roi_names)):
-        #         data[i, j] = np.nan
-        # cmap.set_bad("white", 1.0)
-
-        im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap)
+        # Plot circle for FC values, and connectivity matrix just for p-values
+        im = None
+        if data_idx == pval_pos:
+            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=colormap)
+        else:
+            plot_connectivity_circle(
+                data=data,
+                method=method,
+                band=band,
+                roi_names=roi_names,
+                roi_acronyms=roi_acronyms,
+                condition=condition,
+                save_path=save_path,
+                colormap=colormap,
+                fig=fig,
+                vmin=vmin,
+                vmax=vmax,
+                subplot=(1,3,data_idx+1),
+                title_prefix=None,
+                save_fig=False,
+            )
 
         # Overlay values
         if data_idx != pval_pos:
@@ -867,18 +910,16 @@ def plot_connectivity_and_stats(
                     )
                 )
 
-        if data_idx != 1:  # skip the first plot
-            plt.colorbar(
-                im,
-                label="Connectivity" if data_idx != pval_pos else "p-value",
-                cmap=cmap,
-            )
+        if im and data_idx != 1:  # skip the first plot  
+            label_text = "Connectivity" if data_idx != pval_pos else "p-value"  
+            cmap = plt.get_cmap(colormap)
+            plt.colorbar(im, label=label_text, cmap=cmap)  
 
-        axes[0].set_ylabel("Regions", labelpad=20)
-        ax.set_yticks(range(len(roi_names)), labels=roi_names)
+        axes[2].set_ylabel("Regions", labelpad=20)
+        axes[2].set_yticks(range(len(roi_names)), labels=roi_names)
 
-        ax.set_xlabel("Regions", labelpad=20)
-        ax.set_xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
+        axes[2].set_xlabel("Regions", labelpad=20)
+        axes[2].set_xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
 
         if set_title:
             if data_idx != pval_pos:  # group 1 or group 2
@@ -903,10 +944,8 @@ def plot_connectivity_and_stats(
                     data[i, j] = np.nan
                     p_values[i, j] = np.nan
 
-
     filename = f"{condition}_{band}_{method}.png"
     if save_fig:
         fig.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
     plt.show()
     plt.close()
-
