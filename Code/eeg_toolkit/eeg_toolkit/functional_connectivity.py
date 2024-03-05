@@ -3,7 +3,6 @@ import mne_connectivity as mne_conn
 from mne_connectivity import envelope_correlation
 import mne
 import matplotlib.pyplot as plt
-import matplotlib
 import scipy.io as sio
 import os
 import numpy as np
@@ -593,7 +592,9 @@ def plot_connectivity_circle(
     """
     # Convert ROI names to labels
     labels = [
-        mne.read_labels_from_annot(subject, regexp=roi, subjects_dir=subjects_dir,verbose=False)[0]
+        mne.read_labels_from_annot(
+            subject, regexp=roi, subjects_dir=subjects_dir, verbose=False
+        )[0]
         for roi in roi_names
     ]
     # read colors
@@ -633,7 +634,7 @@ def plot_connectivity_circle(
     # Save the plot order
     node_order = lh_labels[::-1] + rh_labels
 
-    # Circular layout    
+    # Circular layout
     node_angles = mne.viz.circular_layout(
         label_names,
         node_order,
@@ -644,8 +645,7 @@ def plot_connectivity_circle(
     # Plot parameters
     vmin, vmax = (0.0, 0.7) if method == "dwpli" else (None, None)
     vmin, vmax = (0.0, 0.5) if method == "dpli" else (None, None)
-    vmin, vmax = (-1.0, 1.0) if 'aec' in method else (None, None)
-
+    vmin, vmax = (-1.0, 1.0) if "aec" in method else (None, None)
 
     mne_conn.viz.plot_connectivity_circle(
         data,
@@ -677,12 +677,10 @@ def plot_connectivity_circle(
     # plt.show()
     # plt.close()
 
+
 def mann_whitney_test(
-    group1_stack, 
-    group2_stack,
-    roi_names,
-    round_neg_vals=True,
-    method=None):
+    group1_stack, group2_stack, roi_names, round_neg_vals=True, method=None
+):
     """
     Perform Mann-Whitney U test on group1_stack and group2_stack for each ROI combination.
     Calculate p-values, means, and standard error of the mean.
@@ -784,10 +782,10 @@ def plot_connectivity_and_stats(
                 highlight_ij.remove((i, j))
 
     # Create figure and indicate position of p-value plot
-    fig, axes = plt.subplots(1, 3, figsize=(36, 8))
+    fig, axes = plt.subplots(1, 3, figsize=(3.5, 3.5))
     pval_pos = 2
 
-    # Get method name for plot
+    # Get shortened method name for plot
     method = get_method_plot_name(method)
 
     # Print table summary of mean and sem
@@ -802,9 +800,9 @@ def plot_connectivity_and_stats(
         table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
     print(tabulate(table, headers=header, tablefmt="pretty"))
 
-    # Choose the colormap 
+    # Choose the colormap
     colormap = "YlGnBu"
-    
+
     # Loop through means and p values for plotting
     for data_idx, data, ax in zip(
         range(3),
@@ -855,7 +853,7 @@ def plot_connectivity_and_stats(
                 fig=fig,
                 vmin=vmin,
                 vmax=vmax,
-                subplot=(1,3,data_idx+1),
+                subplot=(1, 3, data_idx + 1),
                 title_prefix=None,
                 save_fig=False,
             )
@@ -910,16 +908,18 @@ def plot_connectivity_and_stats(
                     )
                 )
 
-        if im and data_idx != 1:  # skip the first plot  
-            label_text = "Connectivity" if data_idx != pval_pos else "p-value"  
+        if im and data_idx != 1:  # skip the first plot
+            label_text = "Connectivity" if data_idx != pval_pos else "p-value"
             cmap = plt.get_cmap(colormap)
-            plt.colorbar(im, label=label_text, cmap=cmap)  
+            plt.colorbar(im, label=label_text, cmap=cmap)
 
         axes[2].set_ylabel("Regions", labelpad=20)
         axes[2].set_yticks(range(len(roi_names)), labels=roi_names)
 
         axes[2].set_xlabel("Regions", labelpad=20)
-        axes[2].set_xticks(range(len(roi_names)), labels=roi_names, rotation=45, ha="right")
+        axes[2].set_xticks(
+            range(len(roi_names)), labels=roi_names, rotation=45, ha="right"
+        )
 
         if set_title:
             if data_idx != pval_pos:  # group 1 or group 2
