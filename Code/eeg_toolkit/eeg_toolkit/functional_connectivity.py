@@ -558,6 +558,65 @@ def get_method_plot_name(method):
     return method_dict.get(method, method.upper())
 
 
+
+def mann_whitney_test(
+    group1_stack, group2_stack, roi_names, round_neg_vals=True, method=None
+):
+    """
+    Perform Mann-Whitney U test on group1_stack and group2_stack for each ROI combination.
+    Calculate p-values, means, and standard error of the mean.
+    Args:
+        group1_stack: 3D array of data for group 1
+        group2_stack: 3D array of data for group 2
+        roi_names: List of names for the regions of interest
+        method: Method for adjusting the data (default is None)
+    Returns:
+        p_values: Array of p-values for each ROI combination
+        means_1: Means of group 1 data for each ROI combination
+        sem_1: Standard error of the mean of group 1 data for each ROI combination
+        means_2: Means of group 2 data for each ROI combination
+        sem_2: Standard error of the mean of group 2 data for each ROI combination
+    """
+    n = len(roi_names)
+    p_values = np.zeros((n, n))
+    means_1 = np.zeros((n, n))
+    means_2 = np.zeros((n, n))
+    sem_1 = np.zeros((n, n))
+    sem_2 = np.zeros((n, n))
+
+    for i in range(n):
+        for j in range(n):
+            # Perform Mann-Whitney U test
+            data1 = group1_stack[:, i, j]
+            data2 = group2_stack[:, i, j]
+
+            # Round negative values
+            if round_neg_vals:
+                data1[data1 < 0] = 0
+                data2[data2 < 0] = 0
+
+            # If method is 'dpli', adjust data
+            if method == "dpli":
+                data1_tmp = np.abs(data1 - 0.5)
+                data2_tmp = np.abs(data2 - 0.5)
+
+                u, p = stats.mannwhitneyu(data1_tmp, data2_tmp)
+                p_values[i, j] = p
+            else:
+                u, p = stats.mannwhitneyu(data1, data2)
+                p_values[i, j] = p
+
+            # Calculate means
+            means_1[i, j] = np.mean(data1)
+            means_2[i, j] = np.mean(data2)
+
+            # Calculate SEM
+            sem_1[i, j] = stats.sem(data1)
+            sem_2[i, j] = stats.sem(data2)
+
+    return p_values, means_1, sem_1, means_2, sem_2
+
+
 def plot_connectivity_circle(
     data,
     method,
@@ -677,65 +736,6 @@ def plot_connectivity_circle(
     # plt.show()
     # plt.close()
 
-
-def mann_whitney_test(
-    group1_stack, group2_stack, roi_names, round_neg_vals=True, method=None
-):
-    """
-    Perform Mann-Whitney U test on group1_stack and group2_stack for each ROI combination.
-    Calculate p-values, means, and standard error of the mean.
-    Args:
-        group1_stack: 3D array of data for group 1
-        group2_stack: 3D array of data for group 2
-        roi_names: List of names for the regions of interest
-        method: Method for adjusting the data (default is None)
-    Returns:
-        p_values: Array of p-values for each ROI combination
-        means_1: Means of group 1 data for each ROI combination
-        sem_1: Standard error of the mean of group 1 data for each ROI combination
-        means_2: Means of group 2 data for each ROI combination
-        sem_2: Standard error of the mean of group 2 data for each ROI combination
-    """
-    n = len(roi_names)
-    p_values = np.zeros((n, n))
-    means_1 = np.zeros((n, n))
-    means_2 = np.zeros((n, n))
-    sem_1 = np.zeros((n, n))
-    sem_2 = np.zeros((n, n))
-
-    for i in range(n):
-        for j in range(n):
-            # Perform Mann-Whitney U test
-            data1 = group1_stack[:, i, j]
-            data2 = group2_stack[:, i, j]
-
-            # Round negative values
-            if round_neg_vals:
-                data1[data1 < 0] = 0
-                data2[data2 < 0] = 0
-
-            # If method is 'dpli', adjust data
-            if method == "dpli":
-                data1_tmp = np.abs(data1 - 0.5)
-                data2_tmp = np.abs(data2 - 0.5)
-
-                u, p = stats.mannwhitneyu(data1_tmp, data2_tmp)
-                p_values[i, j] = p
-            else:
-                u, p = stats.mannwhitneyu(data1, data2)
-                p_values[i, j] = p
-
-            # Calculate means
-            means_1[i, j] = np.mean(data1)
-            means_2[i, j] = np.mean(data2)
-
-            # Calculate SEM
-            sem_1[i, j] = stats.sem(data1)
-            sem_2[i, j] = stats.sem(data2)
-
-    return p_values, means_1, sem_1, means_2, sem_2
-
-
 def plot_connectivity_and_stats(
     means_1,
     means_2,
@@ -782,7 +782,7 @@ def plot_connectivity_and_stats(
                 highlight_ij.remove((i, j))
 
     # Create figure and indicate position of p-value plot
-    fig, axes = plt.subplots(1, 3, figsize=(3.5, 3.5))
+    # fig, axes = plt.subplots(1, 3, figsize=(12, 12))
     pval_pos = 2
 
     # Get shortened method name for plot
@@ -804,15 +804,25 @@ def plot_connectivity_and_stats(
     colormap = "YlGnBu"
 
     # Loop through means and p values for plotting
-    for data_idx, data, ax in zip(
+    for (
+        data_idx, 
+        data, 
+        # ax,
+        ) in zip(
         range(3),
         [
             means_1,
             means_2,
             p_values,
         ],
-        axes,
+        # axes,
     ):
+            
+        # TODO: temporary for fixing the tiny plot
+        fig, ax = plt.subplots()
+        axes = []*3
+        axes[2] = ax
+    
         # Plot parameters
         vmin, vmax = None, None
         if method == "dwPLI":
