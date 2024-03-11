@@ -11,7 +11,6 @@ Chronic Low Back Pain Study/Notes/
 Code/Misc/
 
 # Ignore repos for other projects
-Code/eeg-erds-stats/
 Code/eeg-unsup-pain-decoding/
 Code/purdonlabmeeg
 
@@ -26,3 +25,6 @@ My*/
 
 # Ignore vscode workspace
 George Kenefati.code-workspace
+
+# Ignore presentations
+Presentations/

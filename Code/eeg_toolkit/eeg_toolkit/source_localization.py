@@ -4,6 +4,9 @@ import numpy as np
 from mne.datasets import fetch_fsaverage
 import sys
 
+# import hdf5storage
+from scipy.io import savemat
+
 sys.path.append("/home/wanglab/Documents/George Kenefati/Code/eeg_toolkit/")
 from eeg_toolkit import utils  # noqa: E402
 
@@ -17,7 +20,7 @@ subjects_dir = os.path.dirname(fs_dir)
 src = os.path.join(fs_dir, "bem", "fsaverage-ico-5-src.fif")  # surface for dSPM
 bem = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem-sol.fif")
 model_fname = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem.fif")
-snr = 3.0  # for inverse
+snr = 1.0  # for non-averaged data
 
 
 def load_raw(data_path, sub_id, condition):
@@ -31,7 +34,7 @@ def load_raw(data_path, sub_id, condition):
     return raw
 
 
-def zscore_epochs(sub_id, data_path, tmin, raw_eo):
+def zscore_epochs(sub_id, data_path, tmin, raw):
     """
     Calculate the z-scores for each epoch in the given EEG dataset.
 
@@ -39,7 +42,7 @@ def zscore_epochs(sub_id, data_path, tmin, raw_eo):
         sub_id (str): The subject ID.
         data_path (str): The path to the data directory.
         tmin (float): The start time of the epochs in seconds.
-        raw_eo (mne.Raw): The raw EEG data.
+        raw (mne.Raw): The raw EEG data.
 
     Returns:
         zepochs (mne.EpochsArray): The z-scored epochs.
@@ -72,7 +75,7 @@ def zscore_epochs(sub_id, data_path, tmin, raw_eo):
         event_id=epochs.event_id,
         events=epochs.events,
     )
-    utils.set_montage(zepochs, raw_eo.get_montage())
+    utils.set_montage(zepochs, raw.get_montage())
 
     return zepochs
 
@@ -85,7 +88,9 @@ def apply_inverse_and_save(
     save_fname,
     sub_id,
     condition,
+    method,
     average_dipoles=True,
+    save_stc_mat=False,
 ):
     """
     Apply inverse operator to MNE object and save STC files.
@@ -107,27 +112,59 @@ def apply_inverse_and_save(
         verbose=True,
     )
     sub_id_if_nan = None
+    label_ts = None
     if isinstance(mne_object, mne.io.fiff.raw.Raw):
         print("Applying inverse to Raw object")
         stc = mne.minimum_norm.apply_inverse_raw(
-            mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
+            mne_object, inverse_operator, method=method, **apply_inverse_and_save_kwargs
         )
     elif isinstance(mne_object, mne.epochs.EpochsArray):
         print("Applying inverse to Epochs object")
         stc = mne.minimum_norm.apply_inverse_epochs(
-            mne_object, inverse_operator, method="dSPM", **apply_inverse_and_save_kwargs
+            mne_object, inverse_operator, method=method, **apply_inverse_and_save_kwargs
         )
     else:
         raise ValueError("Invalid mne_object type")
 
+    # Extract labels and do mean flip
     src = inverse_operator["src"]
     mode = "mean_flip" if average_dipoles else None
     label_ts = mne.extract_label_time_course(stc, labels, src, mode=mode)
+
+    # Save as pickle
+    if not save_stc_mat:
+        utils.pickle_data(save_path, save_fname, label_ts)
+
+    # Save Z-scored Epochs STC only. MAT file for analysis in MATLAB
+    elif save_stc_mat and isinstance(label_ts, list):
+        # Reshape for convention (optional)
+        nepochs = len(label_ts)
+        label_ts = np.concatenate(label_ts)
+        label_ts = np.reshape(label_ts, (nepochs, len(labels), len(mne_object.times)))
+        print("*label_ts shape = ", label_ts.shape)
+
+        for i in range(len(labels)):
+            print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
+            label_ts_i = label_ts[:, i, :]
+            print("*label_ts_i shape = ", label_ts_i.shape)
+            
+            # Save STC Zepochs per region
+            matfiledata = {"data": label_ts_i}
+            save_fname = f"{labels[i].name}_{condition}.mat"
+            # hdf5storage.write(
+            #     matfiledata,
+            #     filename=os.path.join(sub_save_path, save_fname),
+            #     matlab_compatible=True,
+            # )
+            sub_save_path = os.path.join(save_path, sub_id)
+            savemat(os.path.join(sub_save_path, save_fname), matfiledata)
+
+    # Save subject ID if label time courses contain NaN values
     if np.isnan(label_ts).any():
         sub_id_if_nan = sub_id
         # raise ValueError("label_ts contains nan")
 
-    utils.pickle_data(save_path, save_fname, label_ts)
+    utils.clear_display()
 
     return label_ts, sub_id_if_nan
 
@@ -144,7 +181,10 @@ def compute_fwd_and_inv(
     labels,
     save_path,
     save_fname,
+    method,
     average_dipoles=True,
+    save_stc_mat=False,
+    save_inv=True,
 ):
     """
     Save the time course data for specified labels.
@@ -165,32 +205,49 @@ def compute_fwd_and_inv(
     Returns:
         None
     """
-    fwd = mne.make_forward_solution(
-        mne_object.info,
-        trans=trans,
-        src=src,
-        bem=bem,
-        meg=False,
-        eeg=True,
-        n_jobs=-1,
-        verbose=True,
-    )
-    utils.clear_display()
+    # Check if files already saved. Check already in place for regular save to pkl
+    sub_done = False
+    if save_stc_mat:
+        sub_save_path = os.path.join(save_path, sub_id)
+        if not os.path.exists(sub_save_path):
+            os.makedirs(sub_save_path)
+        if len(os.listdir(sub_save_path)) >= len(labels):
+            sub_done = True
 
-    inverse_operator = mne.minimum_norm.make_inverse_operator(
-        mne_object.info, fwd, noise_cov, verbose=True
-    )
+    label_ts, sub_id_if_nan = None, None  # Initialize variables
+    if not sub_done:
+        fwd = mne.make_forward_solution(
+            mne_object.info,
+            trans=trans,
+            src=src,
+            bem=bem,
+            meg=False,
+            eeg=True,
+            n_jobs=-1,
+            verbose=True,
+        )
+        utils.clear_display()
 
-    label_ts, sub_id_if_nan = apply_inverse_and_save(
-        mne_object,
-        inverse_operator,
-        labels,
-        save_path,
-        save_fname,
-        sub_id,
-        condition,
-        average_dipoles=True,
-    )
+        inverse_operator = mne.minimum_norm.make_inverse_operator(
+            mne_object.info, fwd, noise_cov, verbose=True
+        ) 
+        
+        label_ts, sub_id_if_nan = apply_inverse_and_save(
+            mne_object,
+            inverse_operator,
+            labels,
+            save_path,
+            save_fname,
+            sub_id,
+            condition,
+            method=method,
+            average_dipoles=True,
+            save_stc_mat=save_stc_mat,
+        )
+
+        # Save inverse operator for just one of the data types, make it the epochs
+        if save_inv and isinstance(label_ts, list):
+            utils.pickle_data(save_path, f"{sub_id}_inv.pkl", inverse_operator)
 
     return label_ts, sub_id_if_nan
     utils.clear_display()
@@ -204,10 +261,13 @@ def to_source(
     EO_resting_save_path,
     roi_names,
     times_tup,
+    method,
     return_zepochs=True,
     return_EC_resting=False,
     return_EO_resting=False,
     average_dipoles=True,
+    save_stc_mat=False,
+    save_inv=True,
 ):
     """
     Compute the source localization for a subject for eyes closed, eyes open, and z-scored epochs.
@@ -246,6 +306,7 @@ def to_source(
     #################################################################################################
 
     # If processing resting, check directories for count
+    raw = load_raw(data_path, sub_id, condition="preprocessed")
     if return_EO_resting:
         raw_eo = load_raw(data_path, sub_id, condition="eyes_open")
         EO_save_fname = f"{sub_id}_eyes_open.pkl"
@@ -275,7 +336,10 @@ def to_source(
             labels,
             EO_resting_save_path,
             EO_save_fname,
+            method=method,
             average_dipoles=True,
+            save_stc_mat=save_stc_mat,
+            save_inv=save_inv,
         )
 
     # If desired and eyes closed resting data not yet processed, process it
@@ -294,28 +358,66 @@ def to_source(
             labels,
             EC_resting_save_path,
             EC_save_fname,
+            method=method,
             average_dipoles=True,
+            save_stc_mat=save_stc_mat,
+            save_inv=save_inv,
         )
 
     # If desired and epochs not yet processed, Z-score and source localize
-    if return_zepochs and not os.path.exists(
-        f"{zscored_epochs_save_path}/{zepochs_save_fname}"
-    ):
-        zepochs = zscore_epochs(sub_id, data_path, tmin, raw_eo)
+    if return_zepochs:
+        if not save_stc_mat and not os.path.exists(
+            f"{zscored_epochs_save_path}/{zepochs_save_fname}"
+        ):
+            print("Z-scoring epochs...")
+            zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
+            # print shape of zepochs
+            print(zepochs.get_data().shape)
+            
+            print("Source localizing epochs...")
+            label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
+                sub_id,
+                "epochs",
+                snr,
+                trans,
+                src,
+                bem,
+                zepochs,
+                noise_cov,
+                labels,
+                zscored_epochs_save_path,
+                zepochs_save_fname,
+                method=method,
+                average_dipoles=True,
+                save_stc_mat=save_stc_mat,
+                save_inv=save_inv,
+            )
+        if save_stc_mat:  # for save mat overwrite existing folder
+            print(zscored_epochs_save_path, zepochs_save_fname)
+            print(os.path.exists(f"{zscored_epochs_save_path}/{zepochs_save_fname}"))
 
-        label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
-            sub_id,
-            "epochs",
-            snr,
-            trans,
-            src,
-            bem,
-            zepochs,
-            noise_cov,
-            labels,
-            zscored_epochs_save_path,
-            zepochs_save_fname,
-            average_dipoles=True,
-        )
+            print("Z-scoring epochs...")
+            zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
+            # print shape of zepochs
+            print(zepochs.get_data().shape)
+            
+            print("Source localizing epochs...")
+            label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
+                sub_id,
+                "epochs",
+                snr,
+                trans,
+                src,
+                bem,
+                zepochs,
+                noise_cov,
+                labels,
+                zscored_epochs_save_path,
+                zepochs_save_fname,
+                method=method,
+                average_dipoles=True,
+                save_stc_mat=save_stc_mat,
+                save_inv=save_inv,
+            )
 
-    return (label_ts_EO, label_ts_EC, label_ts_Epochs), sub_id_if_nan
+    return (label_ts_Epochs, label_ts_EO, label_ts_EC), sub_id_if_nan

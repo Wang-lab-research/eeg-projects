@@ -1,11 +1,21 @@
 from eeg_toolkit import utils, preprocess
 import mne_connectivity as mne_conn
+from mne_connectivity import envelope_correlation
+import mne
 import matplotlib.pyplot as plt
 import scipy.io as sio
 import os
 import numpy as np
 from tabulate import tabulate
+import scipy.stats as stats
+from mne.datasets import fetch_fsaverage
 
+fs_dir = fetch_fsaverage(verbose=True)
+subject = "fsaverage"
+subjects_dir = os.path.dirname(fs_dir)
+
+# Font size setting
+plt.rcParams["font.size"] = 13
 
 def get_info_by_stim(stim_label, stim_labels, pain_ratings):
     """
@@ -29,7 +39,7 @@ def get_info_by_stim(stim_label, stim_labels, pain_ratings):
 
 # Load in {sub_id}_stim_labels.mat and {sub_id}_pain_ratings.mat} from processed_data_path
 def separate_epochs_by_stim(
-    sub_id, processed_data_path, stc_data_path, include_LS=False, pain_thresh=None
+    sub_id, processed_data_path, stc_data_path, include_LS=True, pain_thresh=None
 ):
     """
     Separates epochs by stimulus for a given subject.
@@ -37,7 +47,7 @@ def separate_epochs_by_stim(
     :param sub_id: The ID of the subject.
     :param processed_data_path: The path to the processed data.
     :param stc_data_path: The path to the label time courses.
-    :param pain_thresh: The pain threshold. Default is None.
+    :param pain_thresh: The pain vtolerance. Default is None.
 
     Returns:
     - hand_all_label_ts: A tuple containing the label time courses for hand stimuli.
@@ -90,7 +100,7 @@ def separate_epochs_by_stim(
     ##############################################################################################
     # Load in label time courses and separate epochs by stimulus
 
-    label_ts = utils.unpickle_data(stc_data_path / f"{sub_id}_epochs.pkl")
+    label_ts = utils.unpickle_data(stc_data_path, f"{sub_id}_epochs.pkl")
     hand_NS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_NS_labels]
     hand_HS_label_ts = [el for i, el in enumerate(label_ts) if i in hand_HS_labels]
 
@@ -150,6 +160,9 @@ def compute_connectivity_epochs(
         sfreq=sfreq,
         fmin=fmin,
         fmax=fmax,
+        tmin=tmin,
+        tmax=tmax,
+        faverage=True,
         mt_adaptive=True,
         n_jobs=1,
     )
@@ -163,29 +176,147 @@ def compute_connectivity_resting_state(
     method,
     fmin,
     fmax,
-    tmin,
-    tmax,
     sfreq,
 ):
-    (
-        con,
-        freqs,
-        times,
-        n_epochs,
-        n_tapers,
-    ) = mne_conn.spectral_connectivity_time(
-        label_ts,
+    # Change shape of resting state label_ts to 3-d for compatibility
+    data = np.expand_dims(label_ts, axis=0)
+
+    # Provide the freq points
+    freqs = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
+
+    # This function does not support dwpli2_debiased, so change to dwpli instead
+    if method == "wpli2_debiased":
+        method = "wpli"
+
+    con = mne_conn.spectral_connectivity_time(
+        data=data,
+        freqs=freqs,
         method=method,
         mode="multitaper",
         sfreq=sfreq,
         fmin=fmin,
         fmax=fmax,
         faverage=True,
-        mt_adaptive=True,
         n_jobs=1,
     )
     print(f"*con shape = {con.shape}*")
     return con
+
+
+def bp_gen(
+    label_ts,
+    sfreq,
+    fmin,
+    fmax,
+    tmin,
+    tmax,
+):
+    """
+    Generate band-pass filtered data using MNE library.
+
+    :param label_ts: list of time series data
+    :param sfreq: sampling frequency
+    :param fmin: minimum frequency of the passband
+    :param fmax: maximum frequency of the passband
+    :return: generator yielding band-pass filtered data
+    """
+    for ts in label_ts:
+        # crop the data between tmin and tmax
+        ts = ts[..., int(np.round(tmin * sfreq)) : int(np.round(tmax * sfreq))]
+
+        print(f"ts shape = {ts.shape}")
+        yield mne.filter.filter_data(
+            ts, sfreq, fmin, fmax, phase="zero-double", method="iir"
+        )
+
+
+def compute_aec(method, label_ts, sfreq, fmin, fmax, tmin, tmax, roi_names):
+    """
+    Compute the correlation between regions of interest (ROIs) using different methods.
+
+    Parameters:
+    - method (str): The method used for computing the correlation. It can be "aec_pairwise" or "aec_symmetric".
+    - label_ts (array-like): The timeseries data for the ROIs.
+    - sfreq (float): The sampling frequency of the timeseries data.
+    - fmin (float): The minimum frequency of interest for the correlation computation.
+    - fmax (float): The maximum frequency of interest for the correlation computation.
+    - roi_names (list): The names of the ROIs.
+
+    Returns:
+    - data (array): The computed correlation data reshaped to match the ROI names.
+    """
+    corr = None
+
+    # for resting data
+    print(f"label_ts shape =  {np.asarray(label_ts).shape}")
+    if np.asarray(label_ts).ndim == 1:
+        label_ts = [np.expand_dims(np.asarray(label_ts), axis=0)]
+
+    if method == "aec_pairwise":
+        corr_obj = envelope_correlation(
+            bp_gen(label_ts, sfreq, fmin, fmax, tmin, tmax),
+            orthogonalize="pairwise",
+        )
+        corr = corr_obj.combine()
+        corr = corr.get_data(output="dense")[:, :, 0]
+    if method == "aec_symmetric":
+        label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
+        corr_obj = envelope_correlation(
+            bp_gen(label_ts_orth, sfreq, fmin, fmax, tmin, tmax), orthogonalize=False
+        )
+        corr = corr_obj.combine()
+        corr = corr.get_data(output="dense")[:, :, 0]
+        corr.flat[:: corr.shape[0] + 1] = 0  # vzero out the diagonal
+        corr = np.abs(corr)
+
+    return corr
+
+
+def plot_corr(corr, title):
+    """
+    Plots a correlation matrix.
+
+    Args:
+        corr (array-like): The correlation matrix to be plotted.
+        title (str): The title of the plot.
+
+    Returns:
+        None
+    """
+    fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+    ax.imshow(corr, cmap="viridis", clim=np.percentile(corr, [5, 95]))
+    fig.suptitle(title)
+
+
+def plot_degree(corr, title, labels, inv):
+    """
+    Plot the degree of connectivity in the brain network.
+
+    Parameters:
+    corr (array-like): The connectivity matrix.
+    title (str): The title of the plot.
+    labels (Label): The labels for regions of interest.
+    inv (dict): The inverse operator.
+
+    Returns:
+    instance of mne.viz.Brain: The plot of the degree connectivity.
+    """
+    threshold_prop = 0.15  # percentage of strongest edges to keep in the graph
+    degree = mne_conn.degree(corr, threshold_prop=threshold_prop)
+    stc = mne.labels_to_stc(labels, degree)
+    stc = stc.in_label(
+        mne.Label(inv["src"][0]["vertno"], hemi="lh")
+        + mne.Label(inv["src"][1]["vertno"], hemi="rh")
+    )
+    return stc.plot(
+        clim=dict(kind="percent", lims=[75, 85, 95]),
+        colormap="gnuplot",
+        subjects_dir=subjects_dir,
+        views="dorsal",
+        hemi="both",
+        smoothing_steps=25,
+        time_label=title,
+    )
 
 
 def compute_sub_avg_con(
@@ -195,13 +326,15 @@ def compute_sub_avg_con(
     zscored_epochs_data_path,
     EO_resting_data_path,
     EC_resting_data_path,
-    connectivity_methods,
+    con_methods,
     conditions,
+    condition_dict,
     roi_names,
     Freq_Bands,
     tmin,
     tmax,
     sfreq,
+    include_LS=False,
 ):
     """
     Compute the average connectivity for each subject, group, and condition.
@@ -213,7 +346,7 @@ def compute_sub_avg_con(
         zscored_epochs_data_path (str): The path to the z-scored epochs data.
         EO_resting_data_path (str): The path to the EO resting data.
         EC_resting_data_path (str): The path to the EC resting data.
-        connectivity_methods (list): List of connectivity methods to compute.
+        con_methods (list): List of connectivity methods to compute.
         conditions (list): List of conditions.
         roi_names (list): List of regions of interest names.
         Freq_Bands (dict): Dictionary of frequency bands.
@@ -234,31 +367,39 @@ def compute_sub_avg_con(
         back_all_label_ts,
         hand_all_ratings,
         back_all_ratings,
-    ) = separate_epochs_by_stim(
-        sub_id, processed_data_path, zscored_epochs_data_path, include_LS=False
-    )
+    ) = separate_epochs_by_stim(sub_id, processed_data_path, zscored_epochs_data_path)
 
     # Resting state
-    # label_ts_EO = utils.unpickle_data(
-    #     EO_resting_data_path, f"{sub_id}_EO.pkl"
-    # )
-    # label_ts_EC = utils.unpickle_data(
-    #     EC_resting_data_path, f"{sub_id}_EC.pkl"
-    # )
+    label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
+    label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
 
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
-    # label_ts_all.extend([label_ts_EO, label_ts_EC])
+    label_ts_all.extend([label_ts_EO, label_ts_EC])
 
     # Get the frequency bands
-    fmins = tuple([list(Freq_Bands.values())[f][0] for f in range(len(Freq_Bands))])
-    fmaxs = tuple([list(Freq_Bands.values())[f][1] for f in range(len(Freq_Bands))])
     fmins = [Freq_Bands[f][0] for f in Freq_Bands]
     fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
+    # Use only label_ts from overlap of condition_dict and conditions
+    desired_conditions_ids = [v for k, v in condition_dict.items() if k in conditions]
+    desired_label_ts = [label_ts_all[i] for i in desired_conditions_ids]
+
     # Compute connectivity for epochs
-    for method in connectivity_methods:
-        for label_ts, condition in zip(label_ts_all, conditions):
+    for method in con_methods:
+        for label_ts, condition in zip(desired_label_ts, conditions):
+            # Adjust for resting state
+            if "Eyes" in condition:
+                label_ts_new = [np.array(lst) for lst in label_ts]
+                label_ts = label_ts_new
+
+            # If label_ts contains NaN values, print and break loop.
+            if np.isnan(label_ts).any():
+                print(
+                    f"Skipping {method} {condition} for {sub_id} due to NaN values in label_ts."
+                )
+                continue
+
             num_epochs = len(label_ts)
             if num_epochs == 0:
                 continue
@@ -266,12 +407,50 @@ def compute_sub_avg_con(
                 table = [
                     ["Subject", sub_id],
                     ["Condition", condition],
-                    ["Num. of epochs", len(label_ts)],
+                    [
+                        "Num. of epochs",
+                        np.array(label_ts).shape[0] if "Eyes" not in condition else 1,
+                    ],
                     ["Band", band_name],
                     ["Method", method],
                 ]
                 print(tabulate(table, tablefmt="grid"))
-                if isinstance(label_ts, list):
+
+                ## Amplitude Envelope Correlation
+                if method == "aec_pairwise":
+                    if "Eyes" in condition and np.array(label_ts).ndim < 3:
+                        label_ts_arr = np.array(label_ts)
+                        label_ts = np.expand_dims(label_ts_arr, axis=0)
+                    # Compute correlation
+                    corr = compute_aec(
+                        "aec_pairwise",
+                        label_ts,
+                        sfreq,
+                        fmin,
+                        fmax,
+                        tmin=tmin,
+                        tmax=tmax,
+                        roi_names=roi_names,
+                    )
+                    data = corr.reshape(len(roi_names), len(roi_names))
+                elif method == "aec_symmetric":
+                    if "Eyes" in condition and np.array(label_ts).ndim < 3:
+                        label_ts_arr = np.array(label_ts)
+                        label_ts = np.expand_dims(label_ts_arr, axis=0)
+                    # Compute correlation
+                    corr = compute_aec(
+                        "aec_symmetric",
+                        label_ts,
+                        sfreq,
+                        fmin,
+                        fmax,
+                        tmin=tmin,
+                        tmax=tmax,
+                        roi_names=roi_names,
+                    )
+                    data = corr.reshape(len(roi_names), len(roi_names))
+
+                elif "Eyes" not in condition and "aec" not in method:
                     con = compute_connectivity_epochs(
                         label_ts,
                         roi_names,
@@ -282,24 +461,25 @@ def compute_sub_avg_con(
                         tmax,
                         sfreq,
                     )
-                    # average points across each frequency band
-                    con_band_averaged = np.mean(con.get_data(), axis=1)
-                    con_band_averaged = con_band_averaged.reshape(
-                        len(roi_names), len(roi_names)
-                    )
+                    # reshape to roi x roi
+                    data = con.get_data()
+                    data = data.reshape(len(roi_names), len(roi_names))
 
-                else:
+                elif "Eyes" in condition and "aec" not in method:
                     # Compute connectivity for resting state
                     con = compute_connectivity_resting_state(
-                        label_ts, roi_names, method, Freq_Bands, sfreq, condition
+                        label_ts,
+                        roi_names,
+                        method,
+                        fmin,
+                        fmax,
+                        sfreq,
                     )
-                    # average points across each frequency band
-                    con_band_averaged = np.mean(con.get_data(), axis=1)
-                    con_band_averaged = con_band_averaged.reshape(
-                        len(roi_names), len(roi_names)
-                    )
+                    # reshape to roi x roi
+                    data = con.get_data()
+                    data = data.reshape(len(roi_names), len(roi_names))
 
-                print(f"*con_band_averaged shape = {con_band_averaged.shape}*")
+                print(f"*data shape = {data.shape}*")
 
                 # Add result to dictionary
                 if condition not in results:
@@ -308,7 +488,7 @@ def compute_sub_avg_con(
                     results[condition]["num_epochs"] = num_epochs
                 if method not in results[condition]:
                     results[condition][method] = {}
-                results[condition][method][band_name] = con_band_averaged
+                results[condition][method][band_name] = data
     return results
 
 
@@ -334,139 +514,449 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
         for method in con_methods:
             for band in band_names:
                 # Compute the average for all subjects
-                avg = np.mean(
+                stack = np.stack(
                     [
                         sub_con_dict[subject][condition][method][band]
                         for subject in subjects
                     ],
-                    axis=0,
                 )
-                # Sum the number of epochs in each condition
-                num_epochs = np.sum(
-                    [
-                        sub_con_dict[subject][condition]["num_epochs"]
-                        for subject in subjects
-                    ]
-                )
-
                 # Add result to dictionary
                 if condition not in avg_dict:
                     avg_dict[condition] = {}
-                if "num_epochs" not in avg_dict[condition]:
-                    avg_dict[condition]["num_epochs"] = num_epochs
                 if method not in avg_dict[condition]:
                     avg_dict[condition][method] = {}
-                avg_dict[condition][method][band] = avg
+                avg_dict[condition][method][band] = stack
+
+        # Sum the number of epochs in each condition
+        num_epochs = np.sum(
+            [sub_con_dict[subject][condition]["num_epochs"] for subject in subjects]
+        )
+        if "num_epochs" not in avg_dict[condition]:
+            avg_dict[condition]["num_epochs"] = num_epochs
 
     return avg_dict
 
 
-plt.rcParams["font.size"] = 21
+def get_method_plot_name(method):
+    """
+    Returns the plot name based on the method provided.
+
+    Args:
+        method (str): The method for which the plot name is to be retrieved.
+
+    Returns:
+        str: The plot name corresponding to the provided method, or the uppercase method if no match is found.
+    """
+    method_dict = {
+        "wpli2_debiased": "dwPLI",
+        "dpli": "dPLI",
+        "aec_pairwise": "AEC Pairwise",
+        "aec_symmetric": "AEC Symmetric",
+    }
+
+    return method_dict.get(method, method.upper())
 
 
-def plot_connectivity(
-    con_data,
-    method,
-    band,
-    roi_names,
-    group_name,
-    condition,
-    num_epochs,
+
+def mann_whitney_test(
+    group1_stack, group2_stack, roi_names, round_neg_vals=True, method=None
 ):
-    plt.figure(figsize=(20, 10))
+    """
+    Perform Mann-Whitney U test on group1_stack and group2_stack for each ROI combination.
+    Calculate p-values, means, and standard error of the mean.
+    Args:
+        group1_stack: 3D array of data for group 1
+        group2_stack: 3D array of data for group 2
+        roi_names: List of names for the regions of interest
+        method: Method for adjusting the data (default is None)
+    Returns:
+        p_values: Array of p-values for each ROI combination
+        means_1: Means of group 1 data for each ROI combination
+        sem_1: Standard error of the mean of group 1 data for each ROI combination
+        means_2: Means of group 2 data for each ROI combination
+        sem_2: Standard error of the mean of group 2 data for each ROI combination
+    """
+    n = len(roi_names)
+    p_values = np.zeros((n, n))
+    means_1 = np.zeros((n, n))
+    means_2 = np.zeros((n, n))
+    sem_1 = np.zeros((n, n))
+    sem_2 = np.zeros((n, n))
 
-    im = plt.imshow(con_data)
-    plt.colorbar(im, label="Connectivity")
+    for i in range(n):
+        for j in range(n):
+            # Perform Mann-Whitney U test
+            data1 = group1_stack[:, i, j]
+            data2 = group2_stack[:, i, j]
 
-    plt.ylabel("Regions", labelpad=20)
-    plt.yticks(range(len(roi_names)), labels=roi_names)
+            # Round negative values
+            if round_neg_vals:
+                data1[data1 < 0] = 0
+                data2[data2 < 0] = 0
 
-    plt.xlabel("Regions", labelpad=20)
-    plt.xticks(range(len(roi_names)), labels=roi_names, rotation=90)
+            # If method is 'dpli', adjust data
+            if method == "dpli":
+                data1_tmp = np.abs(data1 - 0.5)
+                data2_tmp = np.abs(data2 - 0.5)
 
-    plt.title(
-        f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)"
-    )
+                u, p = stats.mannwhitneyu(data1_tmp, data2_tmp)
+                p_values[i, j] = p
+            else:
+                u, p = stats.mannwhitneyu(data1, data2)
+                p_values[i, j] = p
 
-    plt.show()
+            # Calculate means
+            means_1[i, j] = np.mean(data1)
+            means_2[i, j] = np.mean(data2)
+
+            # Calculate SEM
+            sem_1[i, j] = stats.sem(data1)
+            sem_2[i, j] = stats.sem(data2)
+
+    return p_values, means_1, sem_1, means_2, sem_2
 
 
 def plot_connectivity_circle(
-    con_data, method, band, roi_names, group_name, condition, num_epochs
-):
-    plt.figure(figsize=(10, 8))
-    mne_conn.viz.plot_connectivity_circle(
-        con_data,
-        roi_names,
-        title=f"Connectivity of {group_name} Group {condition} condition in {band} band ({method} method, {num_epochs} trials)",
-        facecolor="white",
-        textcolor="black",
-        node_edgecolor="black",
-        fontsize_names=8,
-    )
-
-    plt.show()
-
-
-def plot_and_save(
-    con_data,
+    data,
     method,
     band,
     roi_names,
-    group_name,
+    roi_acronyms,
     condition,
-    num_epochs,
-    plot_funcs,
     save_path,
+    vmin=None,
+    vmax=None,
+    fig=None,
+    subplot=None,
+    colormap="YlGnBu",
+    title_prefix=None,
+    save_fig=False,
+    fontsize_names=None,
+    fontsize_colorbar=None,
 ):
     """
-    Creates and saves plots for each combination of group, condition, and method in avg_results.
+    Plot the connectivity circle for the given connectivity data.
 
-    Parameters:
-    - avg_con: The  averaged connectivity matrix.
-    - plot_func: The function to use for creating the plot.
-    - output_dir: The directory where the plots should be saved.
+    Args:
+        data (numpy.ndarray): The connectivity data.
+        method (str): The method used for connectivity estimation.
+        band (str): The frequency band used for connectivity estimation.
+        roi_names (list): The names of the regions of interest.
+        group_name (str): The name of the group.
+        condition (str): The condition of the data.
+        num_epochs (int): The number of epochs.
+        save_path (str): The path to save the plot.
+
+    Returns:
+        None
     """
+    # Convert ROI names to labels
+    labels = [
+        mne.read_labels_from_annot(
+            subject, regexp=roi, subjects_dir=subjects_dir, verbose=False
+        )[0]
+        for roi in roi_names
+    ]
+    # read colors
+    node_colors = [label.color for label in labels]
 
-    # Create the plot using the provided function and save
-    for plot_func, func_name in zip(plot_funcs, ["conn", "circle"]):
-        plot_func(con_data, method, band, roi_names, group_name, condition, num_epochs)
-        filename = f"{func_name}_{group_name}_{condition}_{band}_{method}.png"
-        plt.savefig(os.path.join(save_path, filename))
+    # We reorder the labels based on their location in the left hemi
+    # label_names = [label.name for label in labels]
+    label_names = roi_acronyms
+    lh_labels = [name for name in label_names if name.endswith("lh")]
+    rh_labels = [name for name in label_names if name.endswith("rh")]
 
-        plt.close()
+    # Get the y-location of the label
+    label_ypos_lh = list()
+    for name in lh_labels:
+        data_idx = label_names.index(name)
+        ypos = np.mean(labels[data_idx].pos[:, 1])
+        label_ypos_lh.append(ypos)
+    try:
+        data_idx = label_names.index("Brain-Stem")
+    except ValueError:
+        pass
+    else:
+        ypos = np.mean(labels[data_idx].pos[:, 1])
+        lh_labels.append("Brain-Stem")
+        label_ypos_lh.append(ypos)
 
+    # Reorder the labels based on their location
+    lh_labels = [label for (yp, label) in sorted(zip(label_ypos_lh, lh_labels))]
 
-# def plot_global_connectivity(epochs, tmin, tmax, n_connections, con_epochs, Freq_Bands):
-#     """
-#     Plot the global connectivity over time.
+    # For the right hemi
+    rh_labels = [
+        label[:-2] + "rh"
+        for label in lh_labels
+        if label != "Brain-Stem" and label[:-2] + "rh" in rh_labels
+    ]
 
-#     Args:
-#         epochs (Epochs): The epochs data.
-#         tmin (float): The minimum time value to include in the plot.
-#         tmax (float): The maximum time value to include in the plot.
-#         n_connections (int): The number of connections.
-#         con_epochs (list): The connectivity epochs.
-#         Freq_Bands (dict): The frequency bands.
-#     """
+    # Save the plot order
+    node_order = lh_labels[::-1] + rh_labels
 
-#     # Get the timepoints within the specified time range
-#     times = epochs.times[(epochs.times >= tmin) & (epochs.times <= tmax)]
+    # Circular layout
+    node_angles = mne.viz.circular_layout(
+        label_names,
+        node_order,
+        start_pos=90,
+        group_boundaries=[0, len(label_names) // 2],
+    )
 
-#     for c in range(len(con_epochs)):
-#         # Get global average connectivity over all connections
-#         con_epochs_raveled_array = con_epochs[c].get_data(output="raveled")
-#         global_con_epochs = np.sum(con_epochs_raveled_array, axis=0) / n_connections
+    # Plot parameters
+    # vmin, vmax = (0.0, 0.7) if method == "dwpli" else (None, None)
+    # vmin, vmax = (0.0, 0.5) if method == "dpli" else (None, None)
+    # vmin, vmax = (-1.0, 1.0) if "aec" in method else (None, None)
 
-#         for i, (k, v) in enumerate(Freq_Bands.items()):
-#             global_con_epochs_tmp = global_con_epochs[i]
+    mne_conn.viz.plot_connectivity_circle(
+        data,
+        roi_acronyms,
+        node_edgecolor="white",
+        node_angles=node_angles,
+        node_colors=node_colors,
+        textcolor="black",
+        facecolor="white",
+        colormap=colormap,
+        fontsize_names=fontsize_names,
+        fontsize_colorbar=fontsize_colorbar,
+        vmin=vmin,
+        vmax=vmax,
+        fig=fig,
+        subplot=subplot,
+        show=False,
+    )
 
-#             # Get the timepoint with the highest global connectivity right after stimulus
-#             t_con_max = np.argmax(global_con_epochs_tmp[times <= tmax])
+    # Save figure
+    if save_fig:
+        fig.tight_layout()
+        filename = f"circle_{condition}_{band}_{method}.png"
+        fig.savefig(
+            os.path.join(save_path, filename),
+            facecolor=fig.get_facecolor(),
+            bbox_inches="tight",
+            dpi=300,
+        )
+    # plt.show()
+    # plt.close()
 
-#             # Plot the global connectivity
-#             fig = plt.figure()
-#             plt.plot(times, global_con_epochs_tmp)
-#             plt.xlabel("Time (s)")
-#             plt.ylabel(f"Global {k} wPLI over trials")
-#             plt.title(f"Global {k} wPLI peaks {times[t_con_max]:.3f}s after stimulus")
+def plot_connectivity_and_stats(
+    means_1,
+    means_2,
+    sem_1,
+    sem_2,
+    p_values,
+    nepochs,
+    group_names,
+    method,
+    band,
+    roi_names,
+    condition,
+    titles,
+    save_names,
+    save_path,
+    fig=None,
+    subplot=None,
+    roi_acronyms=None,
+    save_fig=True,
+    highlight_pvals=True,
+    show_only_significant=True,
+    min_fc_val=None,  # optional minimum value to highlight
+    set_title=True,
+    show_fc_vals=True,
+    round_neg_vals=False,
+):
+    ###############################################################################
+    ### Settings ###
+    # Determine whether data provided is individual data or group data
+    isindividual = True if np.array_equal(means_1,means_2) else False
+    
+    # Set min_fc_val if not provided
+    if min_fc_val is None:
+        min_fc_val = -1
+
+    # Round negative values in the means
+    if round_neg_vals:
+        for data in [means_1, means_2]:
+            for i in range(len(roi_names)):
+                for j in range(len(roi_names)):
+                    if data[i, j] < 0:
+                        data[i, j] == 0.0
+                    
+    # Get highlight indices
+    highlight_ij = []
+    for i in range(len(roi_names)):
+        for j in range(len(roi_names)):
+            
+            if p_values[i, j] < 0.05:
+                highlight_ij.append((i, j))
+
+    # Remove any highlights from upper right triangle
+    for i in range(len(roi_names)):
+        for j in range(i, len(roi_names)):
+            # Also remove those from highlight_ij
+            if (i, j) in highlight_ij:
+                highlight_ij.remove((i, j))
+
+    # Make top-right diagonal and above white
+    for i in range(len(roi_names)):
+        for j in range(i, len(roi_names)):
+            p_values[i, j] = np.nan
+
+    # If showing only significant values, make the rest appear white
+    if show_only_significant:
+        for i in range(len(roi_names)):
+            for j in range(len(roi_names)):
+                if p_values[i, j] >= 0.05:
+                    p_values[i, j] = np.nan
+
+    # Indicate position of p-value plot
+    pval_pos = 2
+
+    # Get shortened method name for plot
+    method = get_method_plot_name(method)
+
+    # Set font sizes
+    overlay_fontsize = 8
+
+    ###############################################################################
+
+    # Print table summary of mean and sem, if not plotting individual data
+    if not isindividual:
+        header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
+        table = []
+        for region_pair in highlight_ij:
+            roi_pair = f"{roi_acronyms[region_pair[0]]} <-> {roi_acronyms[region_pair[1]]}"
+            p_val = np.round(p_values[region_pair[0], region_pair[1]], 3)
+            mean_sem_1 = f"{np.round(means_1[region_pair[0], region_pair[1]],3)} ± {np.round(sem_1[region_pair[0], region_pair[1]],3)}"
+            mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
+
+            table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
+        print(tabulate(table, headers=header, tablefmt="pretty"))
+
+    # Choose the colormap
+    colormap = "viridis"
+
+    # TODO: temporary for fixing the tiny plot
+    fig, ax = plt.subplots()
+    axes = [ax]*3
+
+    # Loop through means and p values for plotting
+    for (
+        data_idx, 
+        data, 
+        ax,
+        ) in zip(
+        range(3),
+        [
+            means_1,
+            means_2,
+            p_values,
+        ],
+        axes,
+    ):
+  
+        # Plot parameters
+        vmin, vmax = None, None
+        if method == "dwPLI":
+            vzero = 0.0
+            vtolerance = 0.5
+            vmin, vmax = (
+                (vzero, vzero + vtolerance) if data_idx != pval_pos else (0.0, 1.0)
+            )
+        elif method == "dPLI":
+            vzero = 0.5
+            vtolerance = 0.2
+            vmin, vmax = (
+                (vzero - vtolerance, vzero + vtolerance)
+                if data_idx != pval_pos
+                else (0.0, 1.0)
+            )
+        elif "AEC" in method:
+            vzero = 0.0
+            vtolerance = 1.0 #TODO: confirm
+            vmin, vmax = (
+                (vzero - vtolerance, vzero + vtolerance) if data_idx != pval_pos else (0.0, 1.0)
+            )
+        else:
+            print(f"Method {method} not supported for vmin and vmax calculation.")
+            # exit()
+
+        # Plot circle for FC values, and connectivity matrix just for p-values
+        im = None
+        if data_idx == pval_pos and not isindividual:
+            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=colormap)
+            if data_idx == 2:  # skip the first plot
+                label_text = "Connectivity" if data_idx != pval_pos else "p-value"
+                cmap = plt.get_cmap(colormap)
+                plt.colorbar(im, label=label_text, cmap=cmap)
+
+            axes[2].set_ylabel("Regions", labelpad=20)
+            axes[2].set_yticks(range(len(roi_acronyms)), labels=roi_acronyms)
+
+            axes[2].set_xlabel("Regions", labelpad=20)
+            axes[2].set_xticks(
+                range(len(roi_acronyms)), labels=roi_acronyms, rotation=45, ha="right"
+            )
+
+            if set_title:
+                if data_idx != pval_pos:  # group 1 or group 2
+                    ax.set_title(
+                        f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[data_idx-1]} trials)"
+                    )
+                else:  # p-values
+                    ax.set_title(
+                        f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
+                    )
+                    
+        else:
+            plot_connectivity_circle(
+                data=data,
+                method=method,
+                band=band,
+                roi_names=roi_names,
+                roi_acronyms=roi_acronyms,
+                condition=condition,
+                save_path=save_path,
+                colormap=colormap,
+                vmin=vmin,
+                vmax=vmax,
+                fontsize_names=13,
+                fontsize_colorbar=13,
+                title_prefix=None,
+                save_fig=False,
+            )
+
+        # Overlay values
+        if data_idx == pval_pos: # if plotting matrix
+            for i in range(len(roi_names)):
+                for j in range(len(roi_names)):
+                    if data[i, j] < 0.05 and not np.isnan(data[i, j]):
+                        if show_fc_vals:
+                            ax.text(
+                                j,
+                                i,
+                                round(data[i, j], 3),
+                                ha="center",
+                                va="center",
+                                color="w",
+                                fontsize=overlay_fontsize,
+                            )
+
+        # Add rectangles for highlighted squares
+        if highlight_pvals:
+            for i, j in highlight_ij:
+                ax.add_patch(
+                    plt.Rectangle(
+                        (j - 0.5, i - 0.5),
+                        1,
+                        1,
+                        fill=False,
+                        edgecolor="red",
+                        linewidth=2,
+                    )
+                )
+
+    filename = f"{condition}_{band}_{method}.png"
+    if save_fig:
+        fig.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
+    plt.show()
+    plt.close()

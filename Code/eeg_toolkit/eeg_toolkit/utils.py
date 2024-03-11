@@ -8,10 +8,25 @@ def clear_display():
     display.clear_output(wait=True)
 
 
-def load_raw_data(eeg_data_raw_file, eog):
+def load_raw_data(data_path, sub_id, eog):
     """
     Load raw EDF data with specified EOG channel.
     """
+    sub_folder = next(
+        sub_folder
+        for sub_folder in os.listdir(os.path.join(data_path))
+        if (sub_folder.startswith(sub_id))
+    )
+    eeg_data_raw_file = os.path.join(
+        data_path,
+        sub_folder,
+        next(
+            subfile
+            for subfile in os.listdir(os.path.join(data_path, sub_folder))
+            if (subfile.endswith((".edf", ".EDF")))
+        ),
+    )
+
     return mne.io.read_raw_edf(eeg_data_raw_file, eog=[eog], preload=True)
 
 
@@ -50,7 +65,7 @@ def pickle_data(save_path, fname, data):
     print(f"Saved {fname} to {save_path}.")
 
 
-def unpickle_data(file_path):
-    with open(file_path, "rb") as f:
+def unpickle_data(path, fname):
+    with open(os.path.join(path, fname), "rb") as f:
         deserialized_object = pickle.load(f)
     return deserialized_object
