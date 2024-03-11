@@ -14,6 +14,8 @@ fs_dir = fetch_fsaverage(verbose=True)
 subject = "fsaverage"
 subjects_dir = os.path.dirname(fs_dir)
 
+# Font size setting
+plt.rcParams["font.size"] = 13
 
 def get_info_by_stim(stim_label, stim_labels, pain_ratings):
     """
@@ -45,7 +47,7 @@ def separate_epochs_by_stim(
     :param sub_id: The ID of the subject.
     :param processed_data_path: The path to the processed data.
     :param stc_data_path: The path to the label time courses.
-    :param pain_thresh: The pain vthresh. Default is None.
+    :param pain_thresh: The pain vtolerance. Default is None.
 
     Returns:
     - hand_all_label_ts: A tuple containing the label time courses for hand stimuli.
@@ -299,8 +301,8 @@ def plot_degree(corr, title, labels, inv):
     Returns:
     instance of mne.viz.Brain: The plot of the degree connectivity.
     """
-    vthresh_prop = 0.15  # percentage of strongest edges to keep in the graph
-    degree = mne_conn.degree(corr, vthresh_prop=vthresh_prop)
+    threshold_prop = 0.15  # percentage of strongest edges to keep in the graph
+    degree = mne_conn.degree(corr, threshold_prop=threshold_prop)
     stc = mne.labels_to_stc(labels, degree)
     stc = stc.in_label(
         mne.Label(inv["src"][0]["vertno"], hemi="lh")
@@ -535,9 +537,6 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     return avg_dict
 
 
-plt.rcParams["font.size"] = 13
-
-
 def get_method_plot_name(method):
     """
     Returns the plot name based on the method provided.
@@ -632,6 +631,8 @@ def plot_connectivity_circle(
     colormap="YlGnBu",
     title_prefix=None,
     save_fig=False,
+    fontsize_names=None,
+    fontsize_colorbar=None,
 ):
     """
     Plot the connectivity circle for the given connectivity data.
@@ -702,9 +703,9 @@ def plot_connectivity_circle(
     )
 
     # Plot parameters
-    vmin, vmax = (0.0, 0.7) if method == "dwpli" else (None, None)
-    vmin, vmax = (0.0, 0.5) if method == "dpli" else (None, None)
-    vmin, vmax = (-1.0, 1.0) if "aec" in method else (None, None)
+    # vmin, vmax = (0.0, 0.7) if method == "dwpli" else (None, None)
+    # vmin, vmax = (0.0, 0.5) if method == "dpli" else (None, None)
+    # vmin, vmax = (-1.0, 1.0) if "aec" in method else (None, None)
 
     mne_conn.viz.plot_connectivity_circle(
         data,
@@ -715,7 +716,8 @@ def plot_connectivity_circle(
         textcolor="black",
         facecolor="white",
         colormap=colormap,
-        fontsize_names=8,
+        fontsize_names=fontsize_names,
+        fontsize_colorbar=fontsize_colorbar,
         vmin=vmin,
         vmax=vmax,
         fig=fig,
@@ -762,52 +764,86 @@ def plot_connectivity_and_stats(
     show_fc_vals=True,
     round_neg_vals=False,
 ):
-
+    ###############################################################################
+    ### Settings ###
+    # Determine whether data provided is individual data or group data
+    isindividual = True if np.array_equal(means_1,means_2) else False
+    
     # Set min_fc_val if not provided
     if min_fc_val is None:
         min_fc_val = -1
 
+    # Round negative values in the means
+    if round_neg_vals:
+        for data in [means_1, means_2]:
+            for i in range(len(roi_names)):
+                for j in range(len(roi_names)):
+                    if data[i, j] < 0:
+                        data[i, j] == 0.0
+                    
     # Get highlight indices
     highlight_ij = []
     for i in range(len(roi_names)):
         for j in range(len(roi_names)):
+            
             if p_values[i, j] < 0.05:
                 highlight_ij.append((i, j))
+
+    # Remove any highlights from upper right triangle
+    for i in range(len(roi_names)):
+        for j in range(i, len(roi_names)):
+            # Also remove those from highlight_ij
+            if (i, j) in highlight_ij:
+                highlight_ij.remove((i, j))
 
     # Make top-right diagonal and above white
     for i in range(len(roi_names)):
         for j in range(i, len(roi_names)):
-            # Remove those from highlight_ij
-            if (i, j) in highlight_ij:
-                highlight_ij.remove((i, j))
+            p_values[i, j] = np.nan
 
-    # Create figure and indicate position of p-value plot
-    # fig, axes = plt.subplots(1, 3, figsize=(12, 12))
+    # If showing only significant values, make the rest appear white
+    if show_only_significant:
+        for i in range(len(roi_names)):
+            for j in range(len(roi_names)):
+                if p_values[i, j] >= 0.05:
+                    p_values[i, j] = np.nan
+
+    # Indicate position of p-value plot
     pval_pos = 2
 
     # Get shortened method name for plot
     method = get_method_plot_name(method)
 
-    # Print table summary of mean and sem
-    header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
-    table = []
-    for region_pair in highlight_ij:
-        roi_pair = f"{roi_acronyms[region_pair[0]]} <-> {roi_acronyms[region_pair[1]]}"
-        p_val = np.round(p_values[region_pair[0], region_pair[1]], 3)
-        mean_sem_1 = f"{np.round(means_1[region_pair[0], region_pair[1]],3)} ± {np.round(sem_1[region_pair[0], region_pair[1]],3)}"
-        mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
+    # Set font sizes
+    overlay_fontsize = 8
 
-        table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
-    print(tabulate(table, headers=header, tablefmt="pretty"))
+    ###############################################################################
+
+    # Print table summary of mean and sem, if not plotting individual data
+    if not isindividual:
+        header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
+        table = []
+        for region_pair in highlight_ij:
+            roi_pair = f"{roi_acronyms[region_pair[0]]} <-> {roi_acronyms[region_pair[1]]}"
+            p_val = np.round(p_values[region_pair[0], region_pair[1]], 3)
+            mean_sem_1 = f"{np.round(means_1[region_pair[0], region_pair[1]],3)} ± {np.round(sem_1[region_pair[0], region_pair[1]],3)}"
+            mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
+
+            table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
+        print(tabulate(table, headers=header, tablefmt="pretty"))
 
     # Choose the colormap
-    colormap = "YlGnBu"
+    colormap = "viridis"
+
+    # TODO: temporary for fixing the tiny plot
+    fig, ax = plt.subplots()
+    axes = [ax]*3
 
     # Loop through means and p values for plotting
     for (
         data_idx, 
         data, 
-        # ax,
+        ax,
         ) in zip(
         range(3),
         [
@@ -815,41 +851,62 @@ def plot_connectivity_and_stats(
             means_2,
             p_values,
         ],
-        # axes,
+        axes,
     ):
-            
-        # TODO: temporary for fixing the tiny plot
-        fig, ax = plt.subplots()
-        axes = []*3
-        axes[2] = ax
-    
+  
         # Plot parameters
         vmin, vmax = None, None
         if method == "dwPLI":
             vzero = 0.0
-            vthresh = 0.5
+            vtolerance = 0.5
             vmin, vmax = (
-                (vzero, vzero + vthresh) if data_idx != pval_pos else (0.0, 1.0)
+                (vzero, vzero + vtolerance) if data_idx != pval_pos else (0.0, 1.0)
             )
         elif method == "dPLI":
             vzero = 0.5
-            vthresh = 0.2
+            vtolerance = 0.2
             vmin, vmax = (
-                (vzero - vthresh, vzero + vthresh)
+                (vzero - vtolerance, vzero + vtolerance)
                 if data_idx != pval_pos
                 else (0.0, 1.0)
             )
         elif "AEC" in method:
             vzero = 0.0
-            vthresh = 0.3
+            vtolerance = 1.0 #TODO: confirm
             vmin, vmax = (
-                (vzero, vzero + vthresh) if data_idx != pval_pos else (0.0, 1.0)
+                (vzero - vtolerance, vzero + vtolerance) if data_idx != pval_pos else (0.0, 1.0)
             )
+        else:
+            print(f"Method {method} not supported for vmin and vmax calculation.")
+            # exit()
 
         # Plot circle for FC values, and connectivity matrix just for p-values
         im = None
-        if data_idx == pval_pos:
+        if data_idx == pval_pos and not isindividual:
             im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=colormap)
+            if data_idx == 2:  # skip the first plot
+                label_text = "Connectivity" if data_idx != pval_pos else "p-value"
+                cmap = plt.get_cmap(colormap)
+                plt.colorbar(im, label=label_text, cmap=cmap)
+
+            axes[2].set_ylabel("Regions", labelpad=20)
+            axes[2].set_yticks(range(len(roi_acronyms)), labels=roi_acronyms)
+
+            axes[2].set_xlabel("Regions", labelpad=20)
+            axes[2].set_xticks(
+                range(len(roi_acronyms)), labels=roi_acronyms, rotation=45, ha="right"
+            )
+
+            if set_title:
+                if data_idx != pval_pos:  # group 1 or group 2
+                    ax.set_title(
+                        f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[data_idx-1]} trials)"
+                    )
+                else:  # p-values
+                    ax.set_title(
+                        f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
+                    )
+                    
         else:
             plot_connectivity_circle(
                 data=data,
@@ -860,36 +917,16 @@ def plot_connectivity_and_stats(
                 condition=condition,
                 save_path=save_path,
                 colormap=colormap,
-                fig=fig,
                 vmin=vmin,
                 vmax=vmax,
-                subplot=(1, 3, data_idx + 1),
+                fontsize_names=13,
+                fontsize_colorbar=13,
                 title_prefix=None,
                 save_fig=False,
             )
 
         # Overlay values
-        if data_idx != pval_pos:
-            for i in range(len(roi_names)):
-                for j in range(len(roi_names)):
-
-                    # If round_neg_vals, round negative values
-                    if round_neg_vals and data[i, j] < 0:
-                        data[i, j] == 0.0
-
-                    # Ignore really low values
-                    if show_fc_vals:
-                        if not np.isnan(data[i, j]) and data[i, j] > min_fc_val:
-                            ax.text(
-                                j,
-                                i,
-                                round(data[i, j], 3),
-                                ha="center",
-                                va="center",
-                                color="k" if method == "dPLI" else "w",
-                                fontsize=11,
-                            )
-        if data_idx == pval_pos:
+        if data_idx == pval_pos: # if plotting matrix
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
                     if data[i, j] < 0.05 and not np.isnan(data[i, j]):
@@ -901,7 +938,7 @@ def plot_connectivity_and_stats(
                                 ha="center",
                                 va="center",
                                 color="w",
-                                fontsize=11,
+                                fontsize=overlay_fontsize,
                             )
 
         # Add rectangles for highlighted squares
@@ -917,42 +954,6 @@ def plot_connectivity_and_stats(
                         linewidth=2,
                     )
                 )
-
-        if im and data_idx != 1:  # skip the first plot
-            label_text = "Connectivity" if data_idx != pval_pos else "p-value"
-            cmap = plt.get_cmap(colormap)
-            plt.colorbar(im, label=label_text, cmap=cmap)
-
-        axes[2].set_ylabel("Regions", labelpad=20)
-        axes[2].set_yticks(range(len(roi_names)), labels=roi_names)
-
-        axes[2].set_xlabel("Regions", labelpad=20)
-        axes[2].set_xticks(
-            range(len(roi_names)), labels=roi_names, rotation=45, ha="right"
-        )
-
-        if set_title:
-            if data_idx != pval_pos:  # group 1 or group 2
-                ax.set_title(
-                    f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[data_idx-1]} trials)"
-                )
-            else:  # p-values
-                ax.set_title(
-                    f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
-                )
-
-    # Make top-right diagonal and above white
-    for i in range(len(roi_names)):
-        for j in range(i, len(roi_names)):
-            data[i, j] = np.nan
-
-    # If showing only significant values, make them appear white
-    if show_only_significant:
-        for i in range(len(roi_names)):
-            for j in range(len(roi_names)):
-                if p_values[i, j] >= 0.05:
-                    data[i, j] = np.nan
-                    p_values[i, j] = np.nan
 
     filename = f"{condition}_{band}_{method}.png"
     if save_fig:
