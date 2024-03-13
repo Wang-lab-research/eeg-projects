@@ -2,6 +2,8 @@
 **/Data/
 **/Processed Data/
 !Chronic Low Back Pain Study/Code/Functional connectivity analysis/Processed Data/
+!Chronic Low Back Pain Study/Data/Eye Timestamps/
+# allow timestamps
 
 # Ignore old code
 Chronic Low Back Pain Study/Misc/

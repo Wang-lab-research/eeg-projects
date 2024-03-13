@@ -17,6 +17,7 @@ subjects_dir = os.path.dirname(fs_dir)
 # Font size setting
 plt.rcParams["font.size"] = 13
 
+
 def get_info_by_stim(stim_label, stim_labels, pain_ratings):
     """
     Get the information by stimulus label.
@@ -557,7 +558,6 @@ def get_method_plot_name(method):
     return method_dict.get(method, method.upper())
 
 
-
 def mann_whitney_test(
     group1_stack, group2_stack, roi_names, round_neg_vals=True, method=None
 ):
@@ -718,8 +718,10 @@ def plot_connectivity_circle(
         colormap=colormap,
         fontsize_names=fontsize_names,
         fontsize_colorbar=fontsize_colorbar,
+        fontsize_title=15,
         vmin=vmin,
         vmax=vmax,
+        title=title_prefix,
         fig=fig,
         subplot=subplot,
         show=False,
@@ -738,6 +740,7 @@ def plot_connectivity_circle(
     # plt.show()
     # plt.close()
 
+
 def plot_connectivity_and_stats(
     means_1,
     means_2,
@@ -753,6 +756,8 @@ def plot_connectivity_and_stats(
     titles,
     save_names,
     save_path,
+    vmin=None,
+    vmax=None,
     fig=None,
     subplot=None,
     roi_acronyms=None,
@@ -767,8 +772,8 @@ def plot_connectivity_and_stats(
     ###############################################################################
     ### Settings ###
     # Determine whether data provided is individual data or group data
-    isindividual = True if np.array_equal(means_1,means_2) else False
-    
+    isindividual = True if np.array_equal(means_1, means_2) else False
+
     # Set min_fc_val if not provided
     if min_fc_val is None:
         min_fc_val = -1
@@ -780,12 +785,12 @@ def plot_connectivity_and_stats(
                 for j in range(len(roi_names)):
                     if data[i, j] < 0:
                         data[i, j] == 0.0
-                    
+
     # Get highlight indices
     highlight_ij = []
     for i in range(len(roi_names)):
         for j in range(len(roi_names)):
-            
+
             if p_values[i, j] < 0.05:
                 highlight_ij.append((i, j))
 
@@ -815,7 +820,7 @@ def plot_connectivity_and_stats(
     method = get_method_plot_name(method)
 
     # Set font sizes
-    overlay_fontsize = 8
+    overlay_fontsize = 9
 
     ###############################################################################
 
@@ -824,7 +829,9 @@ def plot_connectivity_and_stats(
         header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
         table = []
         for region_pair in highlight_ij:
-            roi_pair = f"{roi_acronyms[region_pair[0]]} <-> {roi_acronyms[region_pair[1]]}"
+            roi_pair = (
+                f"{roi_acronyms[region_pair[0]]} <-> {roi_acronyms[region_pair[1]]}"
+            )
             p_val = np.round(p_values[region_pair[0], region_pair[1]], 3)
             mean_sem_1 = f"{np.round(means_1[region_pair[0], region_pair[1]],3)} ± {np.round(sem_1[region_pair[0], region_pair[1]],3)}"
             mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
@@ -833,18 +840,18 @@ def plot_connectivity_and_stats(
         print(tabulate(table, headers=header, tablefmt="pretty"))
 
     # Choose the colormap
-    colormap = "viridis"
+    colormap = "hot_r"
 
     # TODO: temporary for fixing the tiny plot
     fig, ax = plt.subplots()
-    axes = [ax]*3
+    axes = [ax] * 3
 
     # Loop through means and p values for plotting
     for (
-        data_idx, 
-        data, 
+        data_idx,
+        data,
         ax,
-        ) in zip(
+    ) in zip(
         range(3),
         [
             means_1,
@@ -853,41 +860,53 @@ def plot_connectivity_and_stats(
         ],
         axes,
     ):
-  
-        # Plot parameters
-        vmin, vmax = None, None
-        if method == "dwPLI":
-            vzero = 0.0
-            vtolerance = 0.5
-            vmin, vmax = (
-                (vzero, vzero + vtolerance) if data_idx != pval_pos else (0.0, 1.0)
-            )
-        elif method == "dPLI":
-            vzero = 0.5
-            vtolerance = 0.2
-            vmin, vmax = (
-                (vzero - vtolerance, vzero + vtolerance)
-                if data_idx != pval_pos
-                else (0.0, 1.0)
-            )
-        elif "AEC" in method:
-            vzero = 0.0
-            vtolerance = 1.0 #TODO: confirm
-            vmin, vmax = (
-                (vzero - vtolerance, vzero + vtolerance) if data_idx != pval_pos else (0.0, 1.0)
-            )
+
+        # # Plot parameters
+        if vmin is None or vmax is None:  # if not already set
+            if data_idx == pval_pos:
+                vmin, vmax = (0.0, 1.0)
+            else:
+                if method == "dwPLI":
+                    vzero = 0.0
+                    vtolerance = 0.25
+                    vmin, vmax = (
+                        (vzero, vzero + vtolerance)          
+                    )
+                elif method == "dPLI":
+                    vzero = 0.5
+                    vtolerance = 0.2
+                    vmin, vmax = (
+                        (vzero - vtolerance, vzero + vtolerance)
+                    )
+                elif "Pairwise" in method:
+                    vzero = 0.0
+                    vtolerance = 0.7
+                    vmin, vmax = (
+                        (vzero, vzero + vtolerance)
+                    )
+                elif "Symmetric" in method:
+                    vzero = 0.0
+                    vtolerance = 0.3
+                    vmin, vmax = (
+                        (vzero, vzero + vtolerance)
+                    )
+                else:
+                    print(f"Method {method} not supported for vmin and vmax calculation.")
+                    # exit()
         else:
-            print(f"Method {method} not supported for vmin and vmax calculation.")
-            # exit()
+            # set from arguments + the preset for p-value plot
+            if data_idx == pval_pos:
+                vmin, vmax = (0.0, 1.0)
 
         # Plot circle for FC values, and connectivity matrix just for p-values
         im = None
         if data_idx == pval_pos and not isindividual:
-            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=colormap)
-            if data_idx == 2:  # skip the first plot
-                label_text = "Connectivity" if data_idx != pval_pos else "p-value"
-                cmap = plt.get_cmap(colormap)
-                plt.colorbar(im, label=label_text, cmap=cmap)
+            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap="hot")
+            # TODO: confirm delete of colorbar for p-values
+            # if data_idx == 2:  # skip the first plot
+            # label_text = "Connectivity" if data_idx != pval_pos else "p-value"
+            # cmap = plt.get_cmap(colormap)
+            # plt.colorbar(im, label=label_text, cmap=cmap)
 
             axes[2].set_ylabel("Regions", labelpad=20)
             axes[2].set_yticks(range(len(roi_acronyms)), labels=roi_acronyms)
@@ -906,7 +925,7 @@ def plot_connectivity_and_stats(
                     ax.set_title(
                         f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
                     )
-                    
+
         else:
             plot_connectivity_circle(
                 data=data,
@@ -921,12 +940,12 @@ def plot_connectivity_and_stats(
                 vmax=vmax,
                 fontsize_names=13,
                 fontsize_colorbar=13,
-                title_prefix=None,
+                title_prefix=f"{titles[data_idx]} ({nepochs[data_idx]} trials)",
                 save_fig=False,
             )
 
         # Overlay values
-        if data_idx == pval_pos: # if plotting matrix
+        if data_idx == pval_pos:  # if plotting matrix
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
                     if data[i, j] < 0.05 and not np.isnan(data[i, j]):
