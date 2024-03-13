@@ -840,7 +840,7 @@ def plot_connectivity_and_stats(
         print(tabulate(table, headers=header, tablefmt="pretty"))
 
     # Choose the colormap
-    colormap = "viridis_r"
+    colormap = "hot_r"
 
     # TODO: temporary for fixing the tiny plot
     fig, ax = plt.subplots()
@@ -862,32 +862,37 @@ def plot_connectivity_and_stats(
     ):
 
         # # Plot parameters
-        if vmin is None or vmax is None: # if not already set
-            if method == "dwPLI":
-                vzero = 0.0
-                vtolerance = 0.5
-                vmin, vmax = (
-                    (vzero, vzero + vtolerance) if data_idx != pval_pos else (0.0, 1.0)
-                )
-            elif method == "dPLI":
-                vzero = 0.5
-                vtolerance = 0.2
-                vmin, vmax = (
-                    (vzero - vtolerance, vzero + vtolerance)
-                    if data_idx != pval_pos
-                    else (0.0, 1.0)
-                )
-            elif "AEC" in method:
-                vzero = 0.5
-                vtolerance = 0.5  
-                vmin, vmax = (
-                    (vzero - vtolerance, vzero + vtolerance)
-                    if data_idx != pval_pos
-                    else (0.0, 1.0)
-                )
+        if vmin is None or vmax is None:  # if not already set
+            if data_idx == pval_pos:
+                vmin, vmax = (0.0, 1.0)
             else:
-                print(f"Method {method} not supported for vmin and vmax calculation.")
-                # exit()
+                if method == "dwPLI":
+                    vzero = 0.0
+                    vtolerance = 0.25
+                    vmin, vmax = (
+                        (vzero, vzero + vtolerance)          
+                    )
+                elif method == "dPLI":
+                    vzero = 0.5
+                    vtolerance = 0.2
+                    vmin, vmax = (
+                        (vzero - vtolerance, vzero + vtolerance)
+                    )
+                elif "Pairwise" in method:
+                    vzero = 0.0
+                    vtolerance = 0.7
+                    vmin, vmax = (
+                        (vzero, vzero + vtolerance)
+                    )
+                elif "Symmetric" in method:
+                    vzero = 0.0
+                    vtolerance = 0.3
+                    vmin, vmax = (
+                        (vzero, vzero + vtolerance)
+                    )
+                else:
+                    print(f"Method {method} not supported for vmin and vmax calculation.")
+                    # exit()
         else:
             # set from arguments + the preset for p-value plot
             if data_idx == pval_pos:
@@ -896,12 +901,12 @@ def plot_connectivity_and_stats(
         # Plot circle for FC values, and connectivity matrix just for p-values
         im = None
         if data_idx == pval_pos and not isindividual:
-            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap="viridis")
-            # TODO: confirm delete of colorbar for p-values 
+            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap="hot")
+            # TODO: confirm delete of colorbar for p-values
             # if data_idx == 2:  # skip the first plot
-                # label_text = "Connectivity" if data_idx != pval_pos else "p-value"
-                # cmap = plt.get_cmap(colormap)
-                # plt.colorbar(im, label=label_text, cmap=cmap)
+            # label_text = "Connectivity" if data_idx != pval_pos else "p-value"
+            # cmap = plt.get_cmap(colormap)
+            # plt.colorbar(im, label=label_text, cmap=cmap)
 
             axes[2].set_ylabel("Regions", labelpad=20)
             axes[2].set_yticks(range(len(roi_acronyms)), labels=roi_acronyms)
