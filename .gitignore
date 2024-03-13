@@ -1,8 +1,8 @@
 # Ignore all large data
-**/Data/
+**/Data/*
+!Chronic Low Back Pain Study/Data/Eyes Timestamps/
+
 **/Processed Data/
-!Chronic Low Back Pain Study/Code/Functional connectivity analysis/Processed Data/
-!Chronic Low Back Pain Study/Data/Eye Timestamps/
 # allow timestamps
 
 # Ignore old code
