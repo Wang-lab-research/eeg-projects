@@ -718,8 +718,10 @@ def plot_connectivity_circle(
         colormap=colormap,
         fontsize_names=fontsize_names,
         fontsize_colorbar=fontsize_colorbar,
+        fontsize_title=15,
         vmin=vmin,
         vmax=vmax,
+        title=title_prefix,
         fig=fig,
         subplot=subplot,
         show=False,
@@ -818,7 +820,7 @@ def plot_connectivity_and_stats(
     method = get_method_plot_name(method)
 
     # Set font sizes
-    overlay_fontsize = 8
+    overlay_fontsize = 9
 
     ###############################################################################
 
@@ -838,7 +840,7 @@ def plot_connectivity_and_stats(
         print(tabulate(table, headers=header, tablefmt="pretty"))
 
     # Choose the colormap
-    colormap = "viridis"
+    colormap = "viridis_r"
 
     # TODO: temporary for fixing the tiny plot
     fig, ax = plt.subplots()
@@ -876,8 +878,8 @@ def plot_connectivity_and_stats(
                     else (0.0, 1.0)
                 )
             elif "AEC" in method:
-                vzero = 0.0
-                vtolerance = 1.0  # TODO: confirm
+                vzero = 0.5
+                vtolerance = 0.5  
                 vmin, vmax = (
                     (vzero - vtolerance, vzero + vtolerance)
                     if data_idx != pval_pos
@@ -887,18 +889,19 @@ def plot_connectivity_and_stats(
                 print(f"Method {method} not supported for vmin and vmax calculation.")
                 # exit()
         else:
-            # set from arguments
-            if data_idx != pval_pos:
+            # set from arguments + the preset for p-value plot
+            if data_idx == pval_pos:
                 vmin, vmax = (0.0, 1.0)
 
         # Plot circle for FC values, and connectivity matrix just for p-values
         im = None
         if data_idx == pval_pos and not isindividual:
-            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=colormap)
-            if data_idx == 2:  # skip the first plot
-                label_text = "Connectivity" if data_idx != pval_pos else "p-value"
-                cmap = plt.get_cmap(colormap)
-                plt.colorbar(im, label=label_text, cmap=cmap)
+            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap="viridis")
+            # TODO: confirm delete of colorbar for p-values 
+            # if data_idx == 2:  # skip the first plot
+                # label_text = "Connectivity" if data_idx != pval_pos else "p-value"
+                # cmap = plt.get_cmap(colormap)
+                # plt.colorbar(im, label=label_text, cmap=cmap)
 
             axes[2].set_ylabel("Regions", labelpad=20)
             axes[2].set_yticks(range(len(roi_acronyms)), labels=roi_acronyms)
@@ -932,7 +935,7 @@ def plot_connectivity_and_stats(
                 vmax=vmax,
                 fontsize_names=13,
                 fontsize_colorbar=13,
-                title_prefix=None,
+                title_prefix=f"{titles[data_idx]} ({nepochs[data_idx]} trials)",
                 save_fig=False,
             )
 
