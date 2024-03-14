@@ -343,7 +343,8 @@ def to_raw(data_path, sub_id, save_path, csv_path):
     # clear_display()
 
     # Drop reference channels
-    raw.drop_channels(['A1', 'A2'])
+    if 'A1' in raw.ch_names: 
+        raw.drop_channels(['A1', 'A2'])
     
     # fit ICA
     print(f"{sub_id}\nfitting ICA...")

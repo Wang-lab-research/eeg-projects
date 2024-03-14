@@ -842,15 +842,10 @@ def plot_connectivity_and_stats(
     # Choose the colormap
     colormap = "hot_r"
 
-    # TODO: temporary for fixing the tiny plot
-    fig, ax = plt.subplots()
-    axes = [ax] * 3
-
     # Loop through means and p values for plotting
     for (
         data_idx,
         data,
-        ax,
     ) in zip(
         range(3),
         [
@@ -858,7 +853,6 @@ def plot_connectivity_and_stats(
             means_2,
             p_values,
         ],
-        axes,
     ):
 
         # # Plot parameters
@@ -901,28 +895,29 @@ def plot_connectivity_and_stats(
         # Plot circle for FC values, and connectivity matrix just for p-values
         im = None
         if data_idx == pval_pos and not isindividual:
-            im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap="hot")
+            fig = plt.figure()
+            im = plt.imshow(data, vmin=vmin, vmax=vmax, cmap="hot")
             # TODO: confirm delete of colorbar for p-values
             # if data_idx == 2:  # skip the first plot
             # label_text = "Connectivity" if data_idx != pval_pos else "p-value"
             # cmap = plt.get_cmap(colormap)
             # plt.colorbar(im, label=label_text, cmap=cmap)
 
-            axes[2].set_ylabel("Regions", labelpad=20)
-            axes[2].set_yticks(range(len(roi_acronyms)), labels=roi_acronyms)
+            plt.ylabel("Regions", labelpad=20)
+            plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
 
-            axes[2].set_xlabel("Regions", labelpad=20)
-            axes[2].set_xticks(
+            plt.xlabel("Regions", labelpad=20)
+            plt.xticks(
                 range(len(roi_acronyms)), labels=roi_acronyms, rotation=45, ha="right"
             )
 
             if set_title:
                 if data_idx != pval_pos:  # group 1 or group 2
-                    ax.set_title(
+                    plt.title(
                         f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[data_idx-1]} trials)"
                     )
                 else:  # p-values
-                    ax.set_title(
+                    plt.title(
                         f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
                     )
 
@@ -950,7 +945,7 @@ def plot_connectivity_and_stats(
                 for j in range(len(roi_names)):
                     if data[i, j] < 0.05 and not np.isnan(data[i, j]):
                         if show_fc_vals:
-                            ax.text(
+                            plt.text(
                                 j,
                                 i,
                                 round(data[i, j], 3),
@@ -963,7 +958,7 @@ def plot_connectivity_and_stats(
         # Add rectangles for highlighted squares
         if highlight_pvals:
             for i, j in highlight_ij:
-                ax.add_patch(
+                plt.add_patch(
                     plt.Rectangle(
                         (j - 0.5, i - 0.5),
                         1,
