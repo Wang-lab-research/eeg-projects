@@ -14,6 +14,7 @@ Code/Misc/
 
 # Ignore repos for other projects
 Code/eeg-unsup-pain-decoding/
+Code/eeg-erds-stats
 Code/purdonlabmeeg
 
 # Ignore folder of unrelated iEEG study
