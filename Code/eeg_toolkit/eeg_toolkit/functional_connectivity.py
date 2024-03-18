@@ -897,11 +897,6 @@ def plot_connectivity_and_stats(
         if data_idx == pval_pos and not isindividual:
             fig = plt.figure()
             im = plt.imshow(data, vmin=vmin, vmax=vmax, cmap="hot")
-            # TODO: confirm delete of colorbar for p-values
-            # if data_idx == 2:  # skip the first plot
-            # label_text = "Connectivity" if data_idx != pval_pos else "p-value"
-            # cmap = plt.get_cmap(colormap)
-            # plt.colorbar(im, label=label_text, cmap=cmap)
 
             plt.ylabel("Regions", labelpad=20)
             plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
