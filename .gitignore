@@ -1,7 +1,9 @@
 # Ignore all large data
-**/Data/
+**/Data/*
+!Chronic Low Back Pain Study/Data/Eyes Timestamps/
+
 **/Processed Data/
-!Chronic Low Back Pain Study/Code/Functional connectivity analysis/Processed Data/
+# allow timestamps
 
 # Ignore old code
 Chronic Low Back Pain Study/Misc/
@@ -11,7 +13,6 @@ Chronic Low Back Pain Study/Notes/
 Code/Misc/
 
 # Ignore repos for other projects
-Code/eeg-erds-stats/
 Code/eeg-unsup-pain-decoding/
 Code/purdonlabmeeg
 
@@ -23,3 +24,9 @@ gh*
 
 # Ignore irrelevant folders
 My*/
+
+# Ignore vscode workspace
+George Kenefati.code-workspace
+
+# Ignore presentations
+Presentations/
