@@ -9,6 +9,7 @@ import numpy as np
 from tabulate import tabulate
 import scipy.stats as stats
 from mne.datasets import fetch_fsaverage
+from collections import defaultdict
 
 fs_dir = fetch_fsaverage(verbose=True)
 subject = "fsaverage"
@@ -182,8 +183,8 @@ def compute_connectivity_resting_state(
     # Change shape of resting state label_ts to 3-d for compatibility
     data = np.expand_dims(label_ts, axis=0)
 
-    # Provide the freq points
-    freqs = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
+    # Provide the connections points
+    connectionss = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
 
     # This function does not support dwpli2_debiased, so change to dwpli instead
     if method == "wpli2_debiased":
@@ -191,7 +192,7 @@ def compute_connectivity_resting_state(
 
     con = mne_conn.spectral_connectivity_time(
         data=data,
-        freqs=freqs,
+        connectionss=connectionss,
         method=method,
         mode="multitaper",
         sfreq=sfreq,
@@ -331,7 +332,7 @@ def compute_sub_avg_con(
     conditions,
     condition_dict,
     roi_names,
-    Freq_Bands,
+    connections_Bands,
     tmin,
     tmax,
     sfreq,
@@ -350,17 +351,17 @@ def compute_sub_avg_con(
         con_methods (list): List of connectivity methods to compute.
         conditions (list): List of conditions.
         roi_names (list): List of regions of interest names.
-        Freq_Bands (dict): Dictionary of frequency bands.
+        connections_Bands (dict): Dictionary of frequency bands.
         tmin (float): The minimum time.
         tmax (float): The maximum time.
         sfreq (float): The sampling frequency.
 
     Returns:
-        dict: A dictionary containing the connectivity results for each condition, method, and frequency band.
+        dict: A dictionary containing the connectivity sub_dict for each condition, method, and frequency band.
     """
 
     # Initialize dictionary for this subject
-    results = {}
+    sub_dict = {}
 
     # Separate epochs by stimulus
     (
@@ -379,8 +380,8 @@ def compute_sub_avg_con(
     label_ts_all.extend([label_ts_EO, label_ts_EC])
 
     # Get the frequency bands
-    fmins = [Freq_Bands[f][0] for f in Freq_Bands]
-    fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
+    fmins = [connections_Bands[f][0] for f in connections_Bands]
+    fmaxs = [connections_Bands[f][1] for f in connections_Bands]
 
     # Use only label_ts from overlap of condition_dict and conditions
     desired_conditions_ids = [v for k, v in condition_dict.items() if k in conditions]
@@ -404,7 +405,7 @@ def compute_sub_avg_con(
             num_epochs = len(label_ts)
             if num_epochs == 0:
                 continue
-            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_Bands):
+            for fmin, fmax, band_name in zip(fmins, fmaxs, connections_Bands):
                 table = [
                     ["Subject", sub_id],
                     ["Condition", condition],
@@ -483,14 +484,24 @@ def compute_sub_avg_con(
                 print(f"*data shape = {data.shape}*")
 
                 # Add result to dictionary
-                if condition not in results:
-                    results[condition] = {}
-                if "num_epochs" not in results[condition]:
-                    results[condition]["num_epochs"] = num_epochs
-                if method not in results[condition]:
-                    results[condition][method] = {}
-                results[condition][method][band_name] = data
-    return results
+                if condition not in sub_dict:
+                    sub_dict[condition] = {}
+                if "num_epochs" not in sub_dict[condition]:
+                    sub_dict[condition]["num_epochs"] = num_epochs
+                if method not in sub_dict[condition]:
+                    sub_dict[condition][method] = {}
+                sub_dict[condition][method][band_name] = {}
+                sub_dict[condition][method][band_name]["data"] = data
+                
+                # Top 3 connections and their strengths
+                top_connections, strength = get_top_connections(data, method, n_top=3)
+                if "top 3" not in sub_dict[condition][method][band_name]:
+                    sub_dict[condition][method][band_name]["top 3"] = (
+                        top_connections,
+                        strength,
+                    )
+                
+    return sub_dict
 
 
 def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
@@ -498,14 +509,14 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     Compute the average connectivity for all subjects in each group, condition, method, and band.
 
     Args:
-        sub_con_dict (dict): The dictionary containing the connectivity results for each subject.
+        sub_con_dict (dict): The dictionary containing the connectivity sub_dict for each subject.
 
     Returns:
-        dict: A dictionary containing the average connectivity results for each group, condition, method, and band.
+        dict: A dictionary containing the average connectivity sub_dict for each group, condition, method, and band.
     """
 
     # Initialize dictionary for the averages
-    avg_dict = {}
+    group_dict = {}
 
     # Get the list of subjects
     subjects = list(sub_con_dict.keys())
@@ -517,25 +528,50 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
                 # Compute the average for all subjects
                 stack = np.stack(
                     [
-                        sub_con_dict[subject][condition][method][band]
+                        sub_con_dict[subject][condition][method][band]["data"]
                         for subject in subjects
                     ],
                 )
+
                 # Add result to dictionary
-                if condition not in avg_dict:
-                    avg_dict[condition] = {}
-                if method not in avg_dict[condition]:
-                    avg_dict[condition][method] = {}
-                avg_dict[condition][method][band] = stack
+                if condition not in group_dict:
+                    group_dict[condition] = {}
+                if method not in group_dict[condition]:
+                    group_dict[condition][method] = {}
+                group_dict[condition][method][band] = {}
+                group_dict[condition][method][band]["data"] = stack
 
         # Sum the number of epochs in each condition
         num_epochs = np.sum(
             [sub_con_dict[subject][condition]["num_epochs"] for subject in subjects]
         )
-        if "num_epochs" not in avg_dict[condition]:
-            avg_dict[condition]["num_epochs"] = num_epochs
+        if "num_epochs" not in group_dict[condition]:
+            group_dict[condition]["num_epochs"] = num_epochs
+            
+        # Find the top 3 connections that occur most frequently  
+        top_3_connections = [
+            sub_con_dict[subject][condition][method][band]["top 3"][0]
+            for subject in subjects
+        ]
+        # Initialize a defaultdict to store the connections and their strengths  
+        connections_dict = defaultdict(list)  
+        
+        # Loop through the data  
+        for sublist in top_3_connections:  
+            for connection, strength in sublist:  
+                # Append the strength to the corresponding connection in the dictionary  
+                connections_dict[connection].append(strength)  
+        
+        # Sort the connections by their frequency and select the top 3  
+        top_3_connections = sorted(connections_dict, key=lambda k: len(connections_dict[k]), reverse=True)[:3]  
+        
+        if "top 3" not in group_dict[condition][method][band]:
+            group_dict[condition][method][band]["top 3"] = {}
+        group_dict[condition][method][band]["top 3"]["connections"] = [connection for connection in top_3_connections]
+        group_dict[condition][method][band]["top 3"]["frequency"] = [len(connections_dict[connection]) for connection in top_3_connections]
+        group_dict[condition][method][band]["top 3"]["mean strength"] = [np.mean(connections_dict[connection]).round(3) for connection in top_3_connections]
 
-    return avg_dict
+    return group_dict
 
 
 def get_method_plot_name(method):
@@ -576,6 +612,7 @@ def mann_whitney_test(
         means_2: Means of group 2 data for each ROI combination
         sem_2: Standard error of the mean of group 2 data for each ROI combination
     """
+
     n = len(roi_names)
     p_values = np.zeros((n, n))
     means_1 = np.zeros((n, n))
@@ -702,11 +739,6 @@ def plot_connectivity_circle(
         group_boundaries=[0, len(label_names) // 2],
     )
 
-    # Plot parameters
-    # vmin, vmax = (0.0, 0.7) if method == "dwpli" else (None, None)
-    # vmin, vmax = (0.0, 0.5) if method == "dpli" else (None, None)
-    # vmin, vmax = (-1.0, 1.0) if "aec" in method else (None, None)
-
     mne_conn.viz.plot_connectivity_circle(
         data,
         roi_acronyms,
@@ -741,12 +773,44 @@ def plot_connectivity_circle(
     # plt.close()
 
 
+def get_top_connections(data, method, n_top=3):
+    """
+    Get top n_top connections based on strength of the given FC method
+
+    Parameters
+    ----------
+    data : 2D array
+        Matrix of connectivity values
+    n_top : int
+        Number of top connections to get
+
+    Returns
+    -------
+    top_connections : list
+        List of tuples of (region pair, strength)
+    """
+    # Adjust for dpli
+    if method == "dpli":
+        data = np.abs(data - 0.5)
+
+    # Iterate over the lower triangle of the matrix
+    top_connections = []
+    for i in range(0, 12):
+        for j in range(
+            0, i + 1
+        ):  # Start from 0 to i to exclude the diagonal and upper triangle
+            strength = np.round(data[i, j],3)
+            top_connections.append(((i, j), strength))
+
+    # Sort the connections by strength and select the top n_top
+    top_connections.sort(key=lambda x: x[1], reverse=True)
+    top_connections = top_connections[:n_top]
+
+    return top_connections, strength
+
+
 def plot_connectivity_and_stats(
     means_1,
-    means_2,
-    sem_1,
-    sem_2,
-    p_values,
     nepochs,
     group_names,
     method,
@@ -756,6 +820,11 @@ def plot_connectivity_and_stats(
     titles,
     save_names,
     save_path,
+    group_dict=None,
+    means_2=None,
+    sem_1=None,
+    sem_2=None,
+    p_values=None,
     vmin=None,
     vmax=None,
     fig=None,
@@ -769,10 +838,41 @@ def plot_connectivity_and_stats(
     show_fc_vals=True,
     round_neg_vals=False,
 ):
+    """
+    Generate a plot of connectivity and statistics.
+
+    Parameters:
+    - means_1: numpy.ndarray, the means for group 1.
+    - nepochs: list, the number of epochs for each group.
+    - group_names: list, the names of the groups.
+    - method: str, the method used for calculating connectivity.
+    - band: str, the frequency band used.
+    - roi_names: list, the names of the regions of interest.
+    - condition: str, the condition used for the plot.
+    - titles: list, the titles for each plot.
+    - save_names: list, the names for saving the plots.
+    - save_path: str, the path to save the plots.
+    - means_2: numpy.ndarray, the means for group 2 (optional).
+    - sem_1: numpy.ndarray, the standard error of the means for group 1 (optional).
+    - sem_2: numpy.ndarray, the standard error of the means for group 2 (optional).
+    - p_values: numpy.ndarray, the p-values for the regions of interest (optional).
+    - vmin: float, the minimum value for the plot (optional).
+    - vmax: float, the maximum value for the plot (optional).
+    - fig: matplotlib.figure.Figure, the figure object (optional).
+    - subplot: matplotlib.axes._subplots.Subplot, the subplot object (optional).
+    - roi_acronyms: list, the acronyms for the regions of interest (optional).
+    - save_fig: bool, whether to save the figure (default=True).
+    - highlight_pvals: bool, whether to highlight significant p-values (default=True).
+    - show_only_significant: bool, whether to show only significant values (default=True).
+    - min_fc_val: float, the minimum value to highlight (optional).
+    - set_title: bool, whether to set the title (default=True).
+    - show_fc_vals: bool, whether to show the functional connectivity values (default=True).
+    - round_neg_vals: bool, whether to round negative values (default=False).
+    """
     ###############################################################################
     ### Settings ###
     # Determine whether data provided is individual data or group data
-    isindividual = True if np.array_equal(means_1, means_2) else False
+    isindividual = True if means_2 is None else False
 
     # Set min_fc_val if not provided
     if min_fc_val is None:
@@ -780,38 +880,39 @@ def plot_connectivity_and_stats(
 
     # Round negative values in the means
     if round_neg_vals:
-        for data in [means_1, means_2]:
+        for data in [means_1, means_2] if not isindividual else [means_1]:
             for i in range(len(roi_names)):
                 for j in range(len(roi_names)):
                     if data[i, j] < 0:
                         data[i, j] == 0.0
 
-    # Get highlight indices
-    highlight_ij = []
-    for i in range(len(roi_names)):
-        for j in range(len(roi_names)):
-
-            if p_values[i, j] < 0.05:
-                highlight_ij.append((i, j))
-
-    # Remove any highlights from upper right triangle
-    for i in range(len(roi_names)):
-        for j in range(i, len(roi_names)):
-            # Also remove those from highlight_ij
-            if (i, j) in highlight_ij:
-                highlight_ij.remove((i, j))
-
-    # Make top-right diagonal and above white
-    for i in range(len(roi_names)):
-        for j in range(i, len(roi_names)):
-            p_values[i, j] = np.nan
-
-    # If showing only significant values, make the rest appear white
-    if show_only_significant:
+    # Parameters for p-values plot
+    if not isindividual:
+        # Get highlight indices
+        highlight_ij = []
         for i in range(len(roi_names)):
             for j in range(len(roi_names)):
-                if p_values[i, j] >= 0.05:
-                    p_values[i, j] = np.nan
+                if p_values[i, j] < 0.05:
+                    highlight_ij.append((i, j))
+
+        # Remove any highlights from upper right triangle
+        for i in range(len(roi_names)):
+            for j in range(i, len(roi_names)):
+                # Also remove those from highlight_ij
+                if (i, j) in highlight_ij:
+                    highlight_ij.remove((i, j))
+
+        # Make top-right diagonal and above white
+        for i in range(len(roi_names)):
+            for j in range(i, len(roi_names)):
+                p_values[i, j] = np.nan
+
+        # If showing only significant values, make the rest appear white
+        if show_only_significant:
+            for i in range(len(roi_names)):
+                for j in range(len(roi_names)):
+                    if p_values[i, j] >= 0.05:
+                        p_values[i, j] = np.nan
 
     # Indicate position of p-value plot
     pval_pos = 2
@@ -826,6 +927,7 @@ def plot_connectivity_and_stats(
 
     # Print table summary of mean and sem, if not plotting individual data
     if not isindividual:
+        # Print the table summary
         header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
         table = []
         for region_pair in highlight_ij:
@@ -838,6 +940,20 @@ def plot_connectivity_and_stats(
 
             table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
         print(tabulate(table, headers=header, tablefmt="pretty"))
+    else:
+        header = ["ROI Pair", "{method} Value"]
+        table = []
+
+        top_connections, strength = get_top_connections(means_1, method, n_top=3)
+
+        for region_pair, strength in top_connections:
+            roi_pair = (
+                f"{roi_acronyms[region_pair[0]]} <-> {roi_acronyms[region_pair[1]]}"
+            )
+            method_val = np.round(strength, 3)
+
+            table.append([roi_pair, method_val])
+        print(tabulate(table, headers=header, tablefmt="pretty"))
 
     # Choose the colormap
     colormap = "hot_r"
@@ -847,7 +963,7 @@ def plot_connectivity_and_stats(
         data_idx,
         data,
     ) in zip(
-        range(3),
+        range(len(titles)),
         [
             means_1,
             means_2,
@@ -863,29 +979,23 @@ def plot_connectivity_and_stats(
                 if method == "dwPLI":
                     vzero = 0.0
                     vtolerance = 0.25
-                    vmin, vmax = (
-                        (vzero, vzero + vtolerance)          
-                    )
+                    vmin, vmax = (vzero, vzero + vtolerance)
                 elif method == "dPLI":
                     vzero = 0.5
                     vtolerance = 0.2
-                    vmin, vmax = (
-                        (vzero - vtolerance, vzero + vtolerance)
-                    )
+                    vmin, vmax = (vzero - vtolerance, vzero + vtolerance)
                 elif "Pairwise" in method:
                     vzero = 0.0
                     vtolerance = 0.7
-                    vmin, vmax = (
-                        (vzero, vzero + vtolerance)
-                    )
+                    vmin, vmax = (vzero, vzero + vtolerance)
                 elif "Symmetric" in method:
                     vzero = 0.0
                     vtolerance = 0.3
-                    vmin, vmax = (
-                        (vzero, vzero + vtolerance)
-                    )
+                    vmin, vmax = (vzero, vzero + vtolerance)
                 else:
-                    print(f"Method {method} not supported for vmin and vmax calculation.")
+                    print(
+                        f"Method {method} not supported for vmin and vmax calculation."
+                    )
                     # exit()
         else:
             # set from arguments + the preset for p-value plot
@@ -893,10 +1003,9 @@ def plot_connectivity_and_stats(
                 vmin, vmax = (0.0, 1.0)
 
         # Plot circle for FC values, and connectivity matrix just for p-values
-        im = None
         if data_idx == pval_pos and not isindividual:
             fig = plt.figure()
-            im = plt.imshow(data, vmin=vmin, vmax=vmax, cmap="hot")
+            plt.imshow(data, vmin=vmin, vmax=vmax, cmap="hot")
 
             plt.ylabel("Regions", labelpad=20)
             plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
@@ -917,6 +1026,26 @@ def plot_connectivity_and_stats(
                     )
 
         else:
+            # First change vmin and vmax for individual plots
+            if isindividual:
+                if method == "dwPLI":
+                    vzero = 0.0
+                    vtolerance = 1.0
+                    vmin, vmax = (vzero, vzero + vtolerance)
+                elif method == "dPLI":
+                    vzero = 0.5
+                    vtolerance = 0.4
+                    vmin, vmax = (vzero - vtolerance, vzero + vtolerance)
+                elif "Pairwise" in method:
+                    vzero = 0.0
+                    vtolerance = 1.0
+                    vmin, vmax = (vzero, vzero + vtolerance)
+                elif "Symmetric" in method:
+                    vzero = 0.0
+                    vtolerance = 1.0
+                    vmin, vmax = (vzero, vzero + vtolerance)
+
+            fig = plt.figure()
             plot_connectivity_circle(
                 data=data,
                 method=method,
@@ -930,7 +1059,7 @@ def plot_connectivity_and_stats(
                 vmax=vmax,
                 fontsize_names=13,
                 fontsize_colorbar=13,
-                title_prefix=f"{titles[data_idx]} ({nepochs[data_idx]} trials)",
+                title_prefix=f"{titles[data_idx]}",
                 save_fig=False,
             )
 
