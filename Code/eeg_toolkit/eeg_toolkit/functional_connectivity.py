@@ -184,7 +184,7 @@ def compute_connectivity_resting_state(
     data = np.expand_dims(label_ts, axis=0)
 
     # Provide the connections points
-    connectionss = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
+    freqs = np.linspace(fmin, fmax, int((fmax - fmin) * 4 + 1))
 
     # This function does not support dwpli2_debiased, so change to dwpli instead
     if method == "wpli2_debiased":
@@ -192,7 +192,7 @@ def compute_connectivity_resting_state(
 
     con = mne_conn.spectral_connectivity_time(
         data=data,
-        connectionss=connectionss,
+        freqs=freqs,
         method=method,
         mode="multitaper",
         sfreq=sfreq,
@@ -495,11 +495,7 @@ def compute_sub_avg_con(
                 
                 # Top 3 connections and their strengths
                 top_connections, strength = get_top_connections(data, method, n_top=3)
-                if "top 3" not in sub_dict[condition][method][band_name]:
-                    sub_dict[condition][method][band_name]["top 3"] = (
-                        top_connections,
-                        strength,
-                    )
+                sub_dict[condition][method][band_name]["top 3"] = top_connections
                 
     return sub_dict
 
@@ -541,6 +537,29 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
                 group_dict[condition][method][band] = {}
                 group_dict[condition][method][band]["data"] = stack
 
+                # Find the top 3 connections that occur most frequently  
+                top_3_connections = [
+                    sub_con_dict[subject][condition][method][band]["top 3"]
+                    for subject in subjects
+                ]
+                # Initialize a defaultdict to store the connections and their strengths  
+                connections_dict = defaultdict(list)  
+                
+                # Loop through the data  
+                for sublist in top_3_connections:  
+                    for connection, strength in sublist:  
+                        # Append the strength to the corresponding connection in the dictionary  
+                        connections_dict[connection].append(strength)  
+                
+                # Sort the connections by their frequency and select the top 3  
+                top_3_connections = sorted(connections_dict, key=lambda k: len(connections_dict[k]), reverse=True)[:3]  
+                
+                # Store the top 3 connections and their strengths in the group_dict
+                group_dict[condition][method][band]["top 3"] = {}
+                group_dict[condition][method][band]["top 3"]["connections"] = [connection for connection in top_3_connections]
+                group_dict[condition][method][band]["top 3"]["frequency"] = [len(connections_dict[connection]) for connection in top_3_connections]
+                group_dict[condition][method][band]["top 3"]["mean strength"] = [np.mean(connections_dict[connection]).round(3) for connection in top_3_connections]
+
         # Sum the number of epochs in each condition
         num_epochs = np.sum(
             [sub_con_dict[subject][condition]["num_epochs"] for subject in subjects]
@@ -548,29 +567,6 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
         if "num_epochs" not in group_dict[condition]:
             group_dict[condition]["num_epochs"] = num_epochs
             
-        # Find the top 3 connections that occur most frequently  
-        top_3_connections = [
-            sub_con_dict[subject][condition][method][band]["top 3"][0]
-            for subject in subjects
-        ]
-        # Initialize a defaultdict to store the connections and their strengths  
-        connections_dict = defaultdict(list)  
-        
-        # Loop through the data  
-        for sublist in top_3_connections:  
-            for connection, strength in sublist:  
-                # Append the strength to the corresponding connection in the dictionary  
-                connections_dict[connection].append(strength)  
-        
-        # Sort the connections by their frequency and select the top 3  
-        top_3_connections = sorted(connections_dict, key=lambda k: len(connections_dict[k]), reverse=True)[:3]  
-        
-        if "top 3" not in group_dict[condition][method][band]:
-            group_dict[condition][method][band]["top 3"] = {}
-        group_dict[condition][method][band]["top 3"]["connections"] = [connection for connection in top_3_connections]
-        group_dict[condition][method][band]["top 3"]["frequency"] = [len(connections_dict[connection]) for connection in top_3_connections]
-        group_dict[condition][method][band]["top 3"]["mean strength"] = [np.mean(connections_dict[connection]).round(3) for connection in top_3_connections]
-
     return group_dict
 
 

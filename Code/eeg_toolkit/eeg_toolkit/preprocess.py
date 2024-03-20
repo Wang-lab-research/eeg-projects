@@ -170,7 +170,7 @@ def remove_trailing_zeros(raw, sub_id, sfreq):
     raw_dur = raw.times[-1]
     raw_data = raw.get_data()
     need_crop = False
-    
+
     print(f"Looking for trailing zeros in subject {sub_id}")
 
     zero_count = 0
@@ -181,7 +181,9 @@ def remove_trailing_zeros(raw, sub_id, sfreq):
             if zero_count >= 100:
                 start_index = i - (zero_count - 1)
                 end_index = len(ch)
-                print(f"{zero_count} consecutive zeros found starting at index {start_index}")
+                print(
+                    f"{zero_count} consecutive zeros found starting at index {start_index}"
+                )
                 zeros_dur = (end_index - start_index) / sfreq
                 print(f"Duration: {zeros_dur} sec")
                 need_crop = True
@@ -190,7 +192,7 @@ def remove_trailing_zeros(raw, sub_id, sfreq):
             zero_count = 0
     if need_crop:
         print("Need to crop trailing zeros")
-        raw = raw.crop(tmin=0, tmax=raw_dur-np.ceil(zeros_dur), include_tmax=False)
+        raw = raw.crop(tmin=0, tmax=raw_dur - np.ceil(zeros_dur), include_tmax=False)
 
     return raw, need_crop
 
@@ -213,12 +215,12 @@ def to_raw(data_path, sub_id, save_path, csv_path):
     raw_cropped, was_cropped = remove_trailing_zeros(raw, sub_id, sfreq)
     if was_cropped:
         print("Data was cropped to remove trailing zeros.")
-        raw=raw_cropped
-    
+        raw = raw_cropped
+
     # if channel names are numeric, drop them
     raw.drop_channels([ch for ch in raw.ch_names if ch.isnumeric()])
-    
-    # read data, set EOG channel, and drop unused channels    
+
+    # read data, set EOG channel, and drop unused channels
     montage_fname = "../montages/Hydro_Neo_Net_64_xyz_cms_No_FID.sfp"
     Fp1_eog_flag = 0
     # 32 channel case
@@ -238,12 +240,9 @@ def to_raw(data_path, sub_id, save_path, csv_path):
         set_montage(raw, montage_fname)
 
     # 64 channel case
-    else:
-        wrong_64_mtg_flag = 0
-        if {"FT7", "P05"}.issubset(set(raw.ch_names)):
-            wrong_64_mtg_flag = 1
-            # eog_adj = 4
-        elif "VEO" in raw.ch_names or "VEOG" in raw.ch_names:
+    else:       
+        # For Compumedics 64 channel cap
+        if "VEO" in raw.ch_names or "VEOG" in raw.ch_names:
             # eog_adj = 5
             raw = load_raw_data(
                 data_path, sub_folder, "VEO" if "VEO" in raw.ch_names else "VEOG"
@@ -259,22 +258,28 @@ def to_raw(data_path, sub_id, save_path, csv_path):
             raw.drop_channels(non_eeg_chs)
             montage_fname = "../montages/Hydro_Neo_Net_64_xyz_cms_No_FID.sfp"
             set_montage(raw, montage_fname)
-
+            
+            # For subjects C24, 055, 056, 047 the wrong montage was used
+            if {'FT7', 'PO5'}.issubset(set(raw.ch_names)):
+                raw.drop_channels(
+                    ["FT7", "FT8", "PO5", "PO6"]
+                )
+                montage_fname = "../montages/Hydro_Neo_Net_64_xyz_cms_No_FID_Caps.sfp"
+                set_montage(raw, montage_fname)
         if "EEG66" in raw.ch_names:
             non_eeg_chs = ["EEG66", "EEG67", "EEG68", "EEG69"]
             raw.drop_channels(non_eeg_chs)
 
         # For 64 channel gTec cap
         if "AF8" in raw.ch_names:
-            
             # Form the 10-20 montage
             mont1020 = mne.channels.make_standard_montage("standard_1020")
 
             # Rename capitalized channels to lowercase
             print("Renaming capitalized channels to lowercase...")
-            for i,ch in enumerate(raw.info['ch_names']):
-                if 'FP' in ch:
-                    raw.rename_channels({ch: 'Fp' + ch[2:]})
+            for i, ch in enumerate(raw.info["ch_names"]):
+                if "FP" in ch:
+                    raw.rename_channels({ch: "Fp" + ch[2:]})
 
             # Choose what channels you want to keep
             # Make sure that these channels exist e.g. T1 does not exist in the standard 10-20 EEG system!
@@ -291,14 +296,6 @@ def to_raw(data_path, sub_id, save_path, csv_path):
             # Keep the first three rows as they are the fiducial points information
             mont1020_new.dig = mont1020.dig[0:3] + kept_channel_info
             set_montage(raw, mont1020_new)
-
-        # make adjustment for wrong montage subjects
-        if wrong_64_mtg_flag:
-            raw.drop_channels(
-                ["FT7", "FT8", "PO5", "PO6"]
-            )  # for subjects C24, 055, 056, 047
-            montage_fname = "../montages/Hydro_Neo_Net_64_xyz_cms_No_FID_Caps.sfp"
-            set_montage(raw, montage_fname)
 
     # # 007 and 010 had extremely noisy data near the ends of their recordings.
     # # Crop it out.
@@ -334,7 +331,7 @@ def to_raw(data_path, sub_id, save_path, csv_path):
     raw_pyprep.find_all_bads(ransac=False, channel_wise=False, max_chunk_size=None)
     raw.info["bads"] = raw_pyprep.get_bads()
     print(f"{sub_id} bad channels: {raw.info['bads']}")
-    raw.interpolate_bads() 
+    raw.interpolate_bads()
     # clear_display()
 
     # re-reference channels
@@ -343,9 +340,9 @@ def to_raw(data_path, sub_id, save_path, csv_path):
     # clear_display()
 
     # Drop reference channels
-    if 'A1' in raw.ch_names: 
-        raw.drop_channels(['A1', 'A2'])
-    
+    if "A1" in raw.ch_names:
+        raw.drop_channels(["A1", "A2"])
+
     # fit ICA
     print(f"{sub_id}\nfitting ICA...")
     num_goods = len(raw.ch_names) - len(raw.info["bads"]) - 1  # adjust for EOG
@@ -442,7 +439,7 @@ def to_epo(raw, sub_id, data_path, save_path):
             #     events_from_annot_drop_repeats_list[i - 1][-1]
             # )  # get position of epoch description value
             # pre_curr_key_str = key_list[
-                # pre_curr_pos
+            # pre_curr_pos
             # ]  # get key at position (e.g., 'Yes Pain Hand')
             # pre_curr_val = val_list[pre_curr_pos]
 
@@ -670,73 +667,6 @@ def to_epo(raw, sub_id, data_path, save_path):
     # C5 has a glitch where the 100048 keys_from_annot are all at time 0, so there are 6 key press keys_from_annot missing PP because they are followed by a 100048 instead of a 100480.
     # C5 epoch correction sequence is (after 1 for starting correction): 1 0 1 1 1 1.
 
-    # subject ID
-    custom_mapping = {
-        "eyes closed": 1,
-        "Trigger#1": 1,
-        "EYES CLOSED": 1,  # eyes closed
-        "eyes open": 2,
-        "eyes opened": 2,
-        "Trigger#2": 2,
-        "EYES OPEN": 2,
-        "eyes openned": 2,  # eyes open
-        "pinprick hand": 3,
-        "hand pinprick": 3,
-        "Yes Pain Hand": 3,
-        "Trigger#3": 3,
-        "HAND PINPRICK": 3,
-        "hand 32 gauge pinprick": 3,
-        "Yes Hand Pain": 3,
-        "Hand YES Pain prick": 3,
-        # highest intensity pain stimulus
-        "Med Pain Hand": 4,
-        "Med Hand Pain": 4,
-        "Hand Medium Pain prick": 4,  # intermediate intensity pain stimulus (HAND)
-        "No Pain Hand": 5,
-        "hand plastic": 5,
-        "plastic hand": 5,
-        "Trigger#4": 5,
-        "HAND PLASTIC": 5,
-        "hand plastic filament": 5,
-        "No Hand Pain": 5,
-        "Hand NO Pain": 5,
-        # sensory stimulus, no pain
-        "pinprick back": 6,
-        "back pinprick": 6,
-        "Yes Pain Back": 6,
-        "BACK  PINPRICK": 6,
-        "BACK PINPRICK": 6,
-        "Trigger#5": 6,
-        "back 32 gauge pinprick": 6,
-        "Yes Back Pain": 6,
-        "Back YES Pain prick": 6,
-        # highest intensity pain stimulus (BACK)
-        "Med Pain Back": 7,
-        "Med Back Pain": 7,
-        "Back Medium Pain prick": 7,  # intermediate intensity pain stimulus (BACK)
-        "plastic back": 8,
-        "back plastic": 8,
-        "No Pain Back": 8,
-        "BACK PLASTIC": 8,
-        "Trigger#6": 8,
-        "back plastic filament": 8,
-        "No Back Pain": 8,
-        "Back No Pain": 8,
-        # sensory stimulus, no pain (BACK)
-        "stop": 9,
-        "Stop": 9,
-        "STOP": 9,  # stop
-        "1000001": 10,
-        "100160": 10,
-        "100480": 10,
-        "1000010": 11,
-        "100048": 11,  # lesser weight pen tip up
-        "1100001": 12,
-        "100320": 12,
-        "1000000": 12,  # greater weight pen tip down
-        "1100010": 13,  # greater weight pen tip up
-    }
-
     # raw from arguments
     (events_from_annot, event_dict) = mne.events_from_annotations(
         raw, event_id=custom_mapping
@@ -905,7 +835,7 @@ def to_epo(raw, sub_id, data_path, save_path):
     print(epochs)
     print(val_list)
     print(key_list)
-        
+
     # save only stimulus epochs
     (
         stim_labels,
@@ -1299,9 +1229,11 @@ def to_epo(raw, sub_id, data_path, save_path):
 
     print("index\tkey-press\texcel-sheet")
     [
-        print(f"{i} | {keys_from_annot[i]} {ground_truth[i]}   Y")
-        if keys_from_annot[i] == ground_truth[i]
-        else print(f"{i} | {keys_from_annot[i]} {ground_truth[i]}")
+        (
+            print(f"{i} | {keys_from_annot[i]} {ground_truth[i]}   Y")
+            if keys_from_annot[i] == ground_truth[i]
+            else print(f"{i} | {keys_from_annot[i]} {ground_truth[i]}")
+        )
         for i in range(min(len(ground_truth), len(keys_from_annot)))
     ]
 
