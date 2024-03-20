@@ -409,7 +409,7 @@ def to_raw(data_path, sub_id, save_path, csv_path):
 ##############################################
 
 
-def to_epo(raw, sub_id, data_path, save_path):
+def to_epo(raw, sub_id, data_path, times_tup, save_path):
     """
     Preprocess the cleaned -raw.fif to epoched -epo.fif.
     Removes noisy trials and trials with movement artifact.
@@ -766,6 +766,9 @@ def to_epo(raw, sub_id, data_path, save_path):
     key_list = list(event_dict.keys())
     val_list = list(event_dict.values())
 
+    # Get tmin, tmax from times_tup
+    tmin, bmax, tmax = times_tup
+    
     # create epochs object differently depending on paradigm
     if 10 in event_dict.values() or 12 in event_dict.values():
         print(f"{sub_id}\nCreating epochs WITH key presses\n")
@@ -773,8 +776,8 @@ def to_epo(raw, sub_id, data_path, save_path):
             raw,
             events_from_annot,
             event_dict,
-            tmin=-0.2,
-            tmax=0.8,
+            tmin=tmin,
+            tmax=tmax,
             proj=True,
             preload=True,
             event_repeated="merge",
@@ -787,8 +790,8 @@ def to_epo(raw, sub_id, data_path, save_path):
             raw,
             events_from_annot,
             event_dict,
-            tmin=0.0,
-            tmax=1.0,
+            tmin=tmin+0.2,
+            tmax=tmax,
             proj=True,
             preload=True,
             event_repeated="merge",
@@ -1048,7 +1051,7 @@ def to_epo(raw, sub_id, data_path, save_path):
                     elif el == "PM (4)":
                         ground_truth_back_new.append(8)
 
-    except LowerBackError:
+    except ValueError:
         print("Lower back not found in excel sheet")
 
     if lower_back_flag:
@@ -1268,8 +1271,6 @@ def to_epo(raw, sub_id, data_path, save_path):
         print(mtch_ans)
         # if len(StimOn_ids) != len(keys_from_annot): raise
 
-    clear_display()
-
     ###########################################
     # DROPPING FOR STIM LABELS AND PAIN RATINGS
     ###########################################
@@ -1326,7 +1327,6 @@ def to_epo(raw, sub_id, data_path, save_path):
     ar = AutoReject(random_state=42)
     _, reject_log = ar.fit_transform(stim_epochs, return_log=True)
     print(reject_log)
-    # clear_display()
 
     # drop rejected epochs
     bad_epochs_bool = reject_log.bad_epochs.tolist()
@@ -1352,28 +1352,28 @@ def to_epo(raw, sub_id, data_path, save_path):
     print("\nlen(pain_ratings_lst):\t", len(pain_ratings_lst))
 
     # Complete the saves
-    stim_epochs.save(save_path / save_fname + ".fif", verbose=True, overwrite=True)
+    stim_epochs.save(save_path / (save_fname+".fif"), verbose=True, overwrite=True)
 
     # save drop log
     print("\nSaving drop_log as mat file...")
     mdic = {"drop_log": dropped_epochs_list}
-    scio.savemat(save_path / sub_id[:3] + "_drop_log.mat", mdic)
+    scio.savemat(save_path / (sub_id[:3] + "_drop_log.mat"), mdic)
 
     # save epo_times
     print("\nSaving epoch_times as mat file...")
     mdic = {"epo_times": epo_times}
-    scio.savemat(save_path / sub_id[:3] + "_epo_times.mat", mdic)
+    scio.savemat(save_path / (sub_id[:3] + "_epo_times.mat"), mdic)
 
     # save stim labels
     print("\nSaving stim_labels as mat file...")
     mdic = {"stim_labels": ground_truth}
     # mdic = {"stim_labels": keys_from_annot}
-    scio.savemat(save_path / sub_id[:3] + "_stim_labels.mat", mdic)
+    scio.savemat(save_path / (sub_id[:3] + "_stim_labels.mat"), mdic)
 
     # save pain ratings
     print("\nSaving pain_ratings as mat file...\n")
     mdic = {"pain_ratings": pain_ratings_lst}
-    scio.savemat(save_path / sub_id[:3] + "_pain_ratings.mat", mdic)
+    scio.savemat(save_path / (sub_id[:3] + "_pain_ratings.mat"), mdic)
 
     print("Done.")
     # clear_display()
