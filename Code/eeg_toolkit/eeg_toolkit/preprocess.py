@@ -409,7 +409,7 @@ def to_raw(data_path, sub_id, save_path, csv_path):
 ##############################################
 
 
-def to_epo(raw, sub_id, data_path, times_tup, save_path):
+def to_epo(raw, sub_id, data_path, save_path):
     """
     Preprocess the cleaned -raw.fif to epoched -epo.fif.
     Removes noisy trials and trials with movement artifact.
@@ -767,6 +767,7 @@ def to_epo(raw, sub_id, data_path, times_tup, save_path):
     val_list = list(event_dict.values())
 
     # Get tmin, tmax from times_tup
+    times_tup,time_win_path = get_time_window(5)
     tmin, bmax, tmax = times_tup
     
     # create epochs object differently depending on paradigm
@@ -973,8 +974,8 @@ def to_epo(raw, sub_id, data_path, times_tup, save_path):
                 raw,
                 events_from_annot_drop_repeats_arr,
                 event_dict,
-                tmin=-0.2,
-                tmax=0.8,
+                tmin=tmin,
+                tmax=tmax,
                 proj=True,
                 preload=True,
                 event_repeated="drop",
