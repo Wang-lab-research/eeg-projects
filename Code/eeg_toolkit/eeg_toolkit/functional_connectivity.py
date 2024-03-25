@@ -624,6 +624,7 @@ def mann_whitney_test(
 
             # Round negative values
             if round_neg_vals:
+                print(data1)
                 data1[data1 < 0] = 0
                 data2[data2 < 0] = 0
 
@@ -930,7 +931,7 @@ def plot_connectivity_and_stats(
             roi_pair = (
                 f"{roi_acronyms[region_pair[0]]} <-> {roi_acronyms[region_pair[1]]}"
             )
-            p_val = np.round(p_values[region_pair[0], region_pair[1]], 3)
+            p_val = np.round(p_values[region_pair[0], region_pair[1]], 4)
             mean_sem_1 = f"{np.round(means_1[region_pair[0], region_pair[1]],3)} ± {np.round(sem_1[region_pair[0], region_pair[1]],3)}"
             mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
 
