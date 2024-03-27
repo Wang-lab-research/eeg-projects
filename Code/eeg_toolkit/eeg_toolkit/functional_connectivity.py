@@ -388,13 +388,14 @@ def compute_sub_avg_con(
     desired_label_ts = [label_ts_all[i] for i in desired_conditions_ids]
 
     # Compute connectivity for epochs
-    for method in con_methods:
-        for label_ts, condition in zip(desired_label_ts, conditions):
-            # Set up the dictionary
+    for label_ts, condition in zip(desired_label_ts, conditions):
+        # Set up the first level of the dictionary
+        sub_con_dict[condition] = {}
+        for method in con_methods:
+            # Set up the second level of the dictionary
             num_epochs = len(label_ts)
             if num_epochs == 0:
                 continue
-            sub_con_dict[condition] = {}
             sub_con_dict[condition][method] = {}
             sub_con_dict[condition]["num_epochs"] = num_epochs
 
@@ -412,24 +413,23 @@ def compute_sub_avg_con(
 
 
             for fmin, fmax, band_name in zip(fmins, fmaxs, connections_Bands):        
-                # Set up the dictionary
+                # Set up the third level of the dictionary
                 sub_con_dict[condition][method][band_name] = {}
                 
                 # Ignore some specific condition/method combinations
                 if condition=="Hand 256 mN" and "aec" in method:
                     print(f"Skipping {method} {condition} for {sub_id}.")
-                    sub_con_dict[condition][method][band_name]["data"] = {'empty': True}
-                    sub_con_dict[condition][method][band_name]["top 3"] = {'empty': True}
+                    sub_con_dict[condition][method][band_name]["data"] = dict()
+                    sub_con_dict[condition][method][band_name]["top 3"] = dict()
                     continue
                 elif condition=="Eyes Open" and method=="wpli2_debiased":
                     print(f"Skipping {method} {condition} for {sub_id}.")
-                    sub_con_dict[condition][method][band_name]["data"] = {'empty': True}
-                    sub_con_dict[condition][method][band_name]["top 3"] = {'empty': True}
+                    sub_con_dict[condition][method][band_name]["data"] = dict()
+                    sub_con_dict[condition][method][band_name]["top 3"] = dict()
                     continue
-                elif condition=="Hand 256 mN" and method=="wpli2_debiased":
+                else:
                     pass
-                elif condition=="Eyes Open" and "aec" in method:
-                    pass
+
                 print(f"\nComputing {method} {condition} {band_name} for {sub_id}...")
 
                 table = [
@@ -511,11 +511,12 @@ def compute_sub_avg_con(
 
                 # Add result to dictionary
                 sub_con_dict[condition][method][band_name]["data"] = data
-                
+                                                        
                 # Top 3 connections and their strengths
                 top_connections, strength = get_top_connections(data, method, n_top=3)
                 sub_con_dict[condition][method][band_name]["top 3"] = top_connections
-                
+                print(f"sub_con_dict: {sub_con_dict}")
+
     return sub_con_dict
 
 
@@ -538,31 +539,37 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 
     # Iterate over all conditions, methods, and band names
     for condition in conditions:
+        # Initialize dictionary for the condition
+        group_dict[condition] = {}
         for method in con_methods:
-            for band in band_names:  
+            # Skip hand+aec and resting+pli
+            if condition=="Hand 256 mN" and "aec" in method:
+                continue
+            elif condition=="Eyes Open" and method=="wpli2_debiased":
+                continue
+
+            # Initialize dictionary for the method
+            group_dict[condition][method] = {}
+
+            for band in band_names: 
+                # Initialize dictionary for the band
+                group_dict[condition][method][band] = {}
+                
                 # Initialize a list to hold data arrays  
                 data_to_stack = []  
-                
+            
                 for subject in subjects:  
-                    print(f"Stacking {subject} {condition} {method} {band} data.")
                     # Check if the data exists before adding it to the list
-                    if sub_con_dict[subject][condition][method][band]["data"]:  
+                    if isinstance(sub_con_dict[subject][condition][method][band]["data"], np.ndarray):
                         data_to_stack.append(sub_con_dict[subject][condition][method][band]["data"])  
-                
-                # Only stack the data if the list is not empty  
-                if data_to_stack:  
-                    stack = np.stack(data_to_stack)  
-
+                                   
                 # Add result to dictionary
-                group_dict[condition] = {}
-                group_dict[condition][method] = {}
-                group_dict[condition][method][band] = {}
-                group_dict[condition][method][band]["data"] = stack
-
+                group_dict[condition][method][band]["data"] = np.stack(np.array(data_to_stack))  
+                
                 # Find the top 3 connections that occur most frequently  
                 top_3_connections = [
                     sub_con_dict[subject][condition][method][band]["top 3"]
-                    for subject in subjects
+                    for subject in subjects if isinstance(sub_con_dict[subject][condition][method][band]["top 3"], list)
                 ]
                 # Initialize a defaultdict to store the connections and their strengths  
                 connections_dict = defaultdict(list)  
@@ -589,6 +596,8 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
         if "num_epochs" not in group_dict[condition]:
             group_dict[condition]["num_epochs"] = num_epochs
             
+    print("Group connectivity completed.")
+                
     return group_dict
 
 
