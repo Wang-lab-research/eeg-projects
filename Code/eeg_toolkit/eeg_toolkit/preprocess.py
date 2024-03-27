@@ -1247,7 +1247,7 @@ def to_epo(raw, sub_id, data_path, save_path):
 
     ### Use this cell as a workspace if need to manually delete any epochs from stim_epochs and keys_from_annot:
     drop_list = None
-    while mtch_ans != "Yes." and drop_list == None:
+    while mtch_ans != "Yes." and drop_list is None:
         # what to delete
         drop_start = input("annotations drop START: ")
         if "." not in drop_start and "/" not in drop_start and "done" not in drop_start:
