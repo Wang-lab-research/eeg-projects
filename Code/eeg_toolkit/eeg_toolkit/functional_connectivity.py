@@ -357,11 +357,11 @@ def compute_sub_avg_con(
         sfreq (float): The sampling frequency.
 
     Returns:
-        dict: A dictionary containing the connectivity sub_dict for each condition, method, and frequency band.
+        dict: A dictionary containing the connectivity sub_con_dict for each condition, method, and frequency band.
     """
 
     # Initialize dictionary for this subject
-    sub_dict = {}
+    sub_con_dict = {}
 
     # Separate epochs by stimulus
     (
@@ -390,6 +390,14 @@ def compute_sub_avg_con(
     # Compute connectivity for epochs
     for method in con_methods:
         for label_ts, condition in zip(desired_label_ts, conditions):
+            # Set up the dictionary
+            num_epochs = len(label_ts)
+            if num_epochs == 0:
+                continue
+            sub_con_dict[condition] = {}
+            sub_con_dict[condition][method] = {}
+            sub_con_dict[condition]["num_epochs"] = num_epochs
+
             # Adjust for resting state
             if "Eyes" in condition:
                 label_ts_new = [np.array(lst) for lst in label_ts]
@@ -402,10 +410,28 @@ def compute_sub_avg_con(
                 )
                 continue
 
-            num_epochs = len(label_ts)
-            if num_epochs == 0:
-                continue
-            for fmin, fmax, band_name in zip(fmins, fmaxs, connections_Bands):
+
+            for fmin, fmax, band_name in zip(fmins, fmaxs, connections_Bands):        
+                # Set up the dictionary
+                sub_con_dict[condition][method][band_name] = {}
+                
+                # Ignore some specific condition/method combinations
+                if condition=="Hand 256 mN" and "aec" in method:
+                    print(f"Skipping {method} {condition} for {sub_id}.")
+                    sub_con_dict[condition][method][band_name]["data"] = {'empty': True}
+                    sub_con_dict[condition][method][band_name]["top 3"] = {'empty': True}
+                    continue
+                elif condition=="Eyes Open" and method=="wpli2_debiased":
+                    print(f"Skipping {method} {condition} for {sub_id}.")
+                    sub_con_dict[condition][method][band_name]["data"] = {'empty': True}
+                    sub_con_dict[condition][method][band_name]["top 3"] = {'empty': True}
+                    continue
+                elif condition=="Hand 256 mN" and method=="wpli2_debiased":
+                    pass
+                elif condition=="Eyes Open" and "aec" in method:
+                    pass
+                print(f"\nComputing {method} {condition} {band_name} for {sub_id}...")
+
                 table = [
                     ["Subject", sub_id],
                     ["Condition", condition],
@@ -484,20 +510,13 @@ def compute_sub_avg_con(
                 print(f"*data shape = {data.shape}*")
 
                 # Add result to dictionary
-                if condition not in sub_dict:
-                    sub_dict[condition] = {}
-                if "num_epochs" not in sub_dict[condition]:
-                    sub_dict[condition]["num_epochs"] = num_epochs
-                if method not in sub_dict[condition]:
-                    sub_dict[condition][method] = {}
-                sub_dict[condition][method][band_name] = {}
-                sub_dict[condition][method][band_name]["data"] = data
+                sub_con_dict[condition][method][band_name]["data"] = data
                 
                 # Top 3 connections and their strengths
                 top_connections, strength = get_top_connections(data, method, n_top=3)
-                sub_dict[condition][method][band_name]["top 3"] = top_connections
+                sub_con_dict[condition][method][band_name]["top 3"] = top_connections
                 
-    return sub_dict
+    return sub_con_dict
 
 
 def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
@@ -505,10 +524,10 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     Compute the average connectivity for all subjects in each group, condition, method, and band.
 
     Args:
-        sub_con_dict (dict): The dictionary containing the connectivity sub_dict for each subject.
+        sub_con_dict (dict): The dictionary containing the connectivity sub_con_dict for each subject.
 
     Returns:
-        dict: A dictionary containing the average connectivity sub_dict for each group, condition, method, and band.
+        dict: A dictionary containing the average connectivity sub_con_dict for each group, condition, method, and band.
     """
 
     # Initialize dictionary for the averages
@@ -520,20 +539,23 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     # Iterate over all conditions, methods, and band names
     for condition in conditions:
         for method in con_methods:
-            for band in band_names:
-                # Compute the average for all subjects
-                stack = np.stack(
-                    [
-                        sub_con_dict[subject][condition][method][band]["data"]
-                        for subject in subjects
-                    ],
-                )
+            for band in band_names:  
+                # Initialize a list to hold data arrays  
+                data_to_stack = []  
+                
+                for subject in subjects:  
+                    print(f"Stacking {subject} {condition} {method} {band} data.")
+                    # Check if the data exists before adding it to the list
+                    if sub_con_dict[subject][condition][method][band]["data"]:  
+                        data_to_stack.append(sub_con_dict[subject][condition][method][band]["data"])  
+                
+                # Only stack the data if the list is not empty  
+                if data_to_stack:  
+                    stack = np.stack(data_to_stack)  
 
                 # Add result to dictionary
-                if condition not in group_dict:
-                    group_dict[condition] = {}
-                if method not in group_dict[condition]:
-                    group_dict[condition][method] = {}
+                group_dict[condition] = {}
+                group_dict[condition][method] = {}
                 group_dict[condition][method][band] = {}
                 group_dict[condition][method][band]["data"] = stack
 
@@ -736,7 +758,7 @@ def plot_connectivity_circle(
         group_boundaries=[0, len(label_names) // 2],
     )
 
-    mne_conn.viz.plot_connectivity_circle(
+    fig, _ = mne_conn.viz.plot_connectivity_circle(
         data,
         roi_acronyms,
         node_edgecolor="white",
@@ -758,17 +780,15 @@ def plot_connectivity_circle(
 
     # Save figure
     if save_fig:
-        fig.tight_layout()
-        filename = f"circle_{condition}_{band}_{method}.png"
+        # fig.tight_layout()
+        filename = f"{condition}_{band}_{method}.png"
+        os.makedirs(os.path.join(save_path, "Connectivity circle"), exist_ok=True)
         fig.savefig(
-            os.path.join(save_path, filename),
+            os.path.join(save_path, "Connectivity circle", filename),
             facecolor=fig.get_facecolor(),
             bbox_inches="tight",
             dpi=300,
         )
-    # plt.show()
-    # plt.close()
-
 
 def get_top_connections(data, method, n_top=3):
     """
@@ -938,7 +958,8 @@ def plot_connectivity_and_stats(
             table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
         print(tabulate(table, headers=header, tablefmt="pretty"))
     else:
-        header = ["ROI Pair", "{method} Value"]
+        print(f"Top 3 Connections in {group_names} group")
+        header = ["Top connections", f"{method} Value"]
         table = []
 
         top_connections, strength = get_top_connections(means_1, method, n_top=3)
@@ -1042,7 +1063,7 @@ def plot_connectivity_and_stats(
                     vtolerance = 1.0
                     vmin, vmax = (vzero, vzero + vtolerance)
 
-            fig = plt.figure()
+            plt.figure()
             plot_connectivity_circle(
                 data=data,
                 method=method,
@@ -1057,7 +1078,7 @@ def plot_connectivity_and_stats(
                 fontsize_names=13,
                 fontsize_colorbar=13,
                 title_prefix=f"{titles[data_idx]}",
-                save_fig=False,
+                save_fig=True,
             )
 
         # Overlay values
@@ -1090,8 +1111,8 @@ def plot_connectivity_and_stats(
                     )
                 )
 
-    filename = f"{condition}_{band}_{method}.png"
-    if save_fig:
-        fig.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
-    plt.show()
-    plt.close()
+        filename = f"{condition}_{band}_{method}.png"
+        if fig and save_fig and not isindividual:
+            fig.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
+        plt.show()
+        plt.close()
