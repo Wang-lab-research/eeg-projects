@@ -792,7 +792,7 @@ def to_epo(raw, sub_id, data_path, save_path):
             events_from_annot,
             event_dict,
             tmin=tmin+0.2,
-            tmax=tmax,
+            tmax=tmax+0.2,
             proj=True,
             preload=True,
             event_repeated="merge",
