@@ -25,11 +25,15 @@ gh*
 # Ignore irrelevant folders
 My*/
 
-# Ignore vscode workspace
+# Ignore vscode workspace and miscellaneous metafiles
 George Kenefati.code-workspace
+eeg-projects.code-workspace
+mne.yaml
+.DS_Store
 
 # Ignore presentations
 Presentations/
 Chronic Low Back Pain Study/Code/Functional connectivity analysis/fc_widespread_pain.pdf
 Chronic Low Back Pain Study/Code/Functional connectivity analysis/FC_figures_MNE_Hand.pdf
 Chronic Low Back Pain Study/Code/Functional connectivity analysis/FC_figures_dSPM_Hand.pdf
+

@@ -516,7 +516,6 @@ def compute_sub_avg_con(
                 # Top 3 connections and their strengths
                 top_connections, strength = get_top_connections(data, method, n_top=3)
                 sub_con_dict[condition][method][band_name]["top 3"] = top_connections
-                print(f"sub_con_dict: {sub_con_dict}")
 
     return sub_con_dict
 
