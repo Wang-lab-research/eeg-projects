@@ -10,6 +10,7 @@ from tabulate import tabulate
 import scipy.stats as stats
 from mne.datasets import fetch_fsaverage
 from collections import defaultdict
+import bct
 
 fs_dir = fetch_fsaverage(verbose=True)
 subject = "fsaverage"
@@ -515,7 +516,6 @@ def compute_sub_avg_con(
                 # Top 3 connections and their strengths
                 top_connections, strength = get_top_connections(data, method, n_top=3)
                 sub_con_dict[condition][method][band_name]["top 3"] = top_connections
-                print(f"sub_con_dict: {sub_con_dict}")
 
     return sub_con_dict
 
@@ -680,6 +680,70 @@ def mann_whitney_test(
 
     return p_values, means_1, sem_1, means_2, sem_2
 
+def compute_centrality_and_test(
+    group1_stack, 
+    group2_stack, 
+    roi_acronyms, 
+    round_neg_vals=True,
+    method=None,
+):
+    """
+    Compute centrality measures for group1_stack and group2_stack.
+
+    """
+    # Round negative values before computing centrality
+    if round_neg_vals:
+        group1_stack[group1_stack < 0] = 0
+        group2_stack[group2_stack < 0] = 0
+    
+    # Compute betweenness centrality  for each subject
+    group1_centrality = np.empty((len(group1_stack), len(roi_acronyms)))
+    group2_centrality = np.empty((len(group2_stack), len(roi_acronyms)))
+
+    for i in range(len(group1_stack)):
+        group1_centrality[i,:] = (bct.betweenness_wei(group1_stack[i]))
+        group2_centrality[i,:] = (bct.betweenness_wei(group2_stack[i]))
+
+    # Perform Mann-Whitney U test between the nodes of both groups 
+    p_values = []
+    means_1 = []
+    means_2 = []
+    sem_1 = []
+    sem_2 = []
+    for j in range(len(roi_acronyms)):
+        data1 = group1_centrality[:, j]
+        data2 = group2_centrality[:, j]
+    
+        # Test using Mann-Whitney U 
+        u, p = stats.mannwhitneyu(data1, data2)
+        p_values.append(p)
+    
+        # Calculate means
+        means_1.append(np.mean(group1_centrality[:, j]))
+        means_2.append(np.mean(group2_centrality[:, j]))
+        
+        # Calculate SEM
+        sem_1.append(stats.sem(group1_centrality[:, j]))
+        sem_2.append(stats.sem(group2_centrality[:, j]))
+
+    # Print centrality results in table format
+    print("\nBetweenness Centrality by Region:")
+    header = ["ROI", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
+    table = []
+    for region in range(len(roi_acronyms)): 
+        roi_name = roi_acronyms[region]
+        p_val = f"{np.round(p_values[region],4)}"
+        mean_sem_1 = f"{np.round(means_1[region],3)} ± {np.round(sem_1[region],3)}"
+        mean_sem_2 = f"{np.round(means_2[region],3)} ± {np.round(sem_2[region],3)}"
+        table.append([roi_name, p_val, mean_sem_1, mean_sem_2])
+    print(tabulate(table, headers=header, tablefmt="pretty"))
+
+    print(group1_centrality[:,0])
+    print(group1_centrality[:,-1])
+    print(group2_centrality[:,0])
+    print(group2_centrality[:,-1])
+    
+    return p_values, means_1, sem_1, means_2, sem_2, group1_centrality, group2_centrality
 
 def plot_connectivity_circle(
     data,
@@ -954,6 +1018,7 @@ def plot_connectivity_and_stats(
     # Print table summary of mean and sem, if not plotting individual data
     if not isindividual:
         # Print the table summary
+        print(f"\nMann-Whitney U Test Between {group_names[0]} and {group_names[1]}:")
         header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
         table = []
         for region_pair in highlight_ij:
