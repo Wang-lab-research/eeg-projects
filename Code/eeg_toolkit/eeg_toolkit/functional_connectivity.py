@@ -555,22 +555,20 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
                 group_dict[condition][method][band] = {}
 
                 # Initialize a list to hold data arrays
-                data_to_stack = []
+                data_to_stack = np.empty(len(subjects))
 
-                for subject in subjects:
+                for i, subject in enumerate(subjects):
                     # Check if the data exists before adding it to the list
                     if isinstance(
                         sub_con_dict[subject][condition][method][band]["data"],
                         np.ndarray,
                     ):
-                        data_to_stack.append(
-                            sub_con_dict[subject][condition][method][band]["data"]
-                        )
+                        data_to_stack[i] = sub_con_dict[subject][condition][method][
+                            band
+                        ]["data"]
 
                 # Add result to dictionary
-                group_dict[condition][method][band]["data"] = np.stack(
-                    np.array(data_to_stack)
-                )
+                group_dict[condition][method][band]["data"] = np.stack(data_to_stack)
 
                 # Find the top 3 connections that occur most frequently
                 top_3_connections = [
@@ -717,10 +715,10 @@ def compute_centrality_and_test(
     if round_neg_vals:
         group1_stack[group1_stack < 0] = 0
         group2_stack[group2_stack < 0] = 0
-    
+
     # Replace zero values with small value
-    min_nonzero = np.min(group1_stack[group1_stack > 0])  
-    group1_stack[group1_stack == 0] = min_nonzero 
+    min_nonzero = np.min(group1_stack[group1_stack > 0])
+    group1_stack[group1_stack == 0] = min_nonzero
 
     min_nonzero = np.min(group2_stack[group2_stack > 0])
     group2_stack[group2_stack == 0] = min_nonzero
