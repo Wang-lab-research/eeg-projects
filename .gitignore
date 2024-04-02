@@ -1,6 +1,7 @@
 # Ignore all large data
 **/Data/*
 !Chronic Low Back Pain Study/Data/Eyes Timestamps/
+!Chronic Low Back Pain Study/Data/Func*/Check*/
 
 **/Processed Data/
 # allow timestamps
