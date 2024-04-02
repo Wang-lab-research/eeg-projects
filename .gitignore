@@ -1,9 +1,10 @@
 # Ignore all large data
 **/Data/*
 !Chronic Low Back Pain Study/Data/Eyes Timestamps/
-!Chronic Low Back Pain Study/Data/Func*/Check*/
-
+!Chronic Low Back Pain Study/Data/Functional Connectivity (dSPM)/Checkpoints: ['Hand 256 mN', 'Eyes Open']/
+!Chronic Low Back Pain Study/Data/Functional Connectivity (MNE)/Checkpoints: ['Hand 256 mN', 'Eyes Open']/
 **/Processed Data/
+
 # allow timestamps
 
 # Ignore old code
