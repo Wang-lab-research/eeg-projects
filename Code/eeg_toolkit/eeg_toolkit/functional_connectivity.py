@@ -722,6 +722,10 @@ def compute_centrality_and_test(
 
     min_nonzero = np.min(group2_stack[group2_stack > 0])
     group2_stack[group2_stack == 0] = min_nonzero
+ 
+    # Convert connectivity to connection-length matrix
+    group1_stack = 1 / group1_stack
+    group2_stack = 1 / group2_stack
 
     # Compute betweenness centrality  for each subject
     group1_centrality = np.empty((len(group1_stack), len(roi_acronyms)))
@@ -731,9 +735,15 @@ def compute_centrality_and_test(
     for i in range(len(group1_stack)):
         group1_centrality[i, :] = bct.betweenness_wei(group1_stack[i])
         group2_centrality[i, :] = bct.betweenness_wei(group2_stack[i])
-        print(group1_stack[i])
-        print(group2_stack[i])
-        exit()
+        
+        # Normalize betweenness centrality 
+        N = len(roi_acronyms)  
+        bc1 = group1_centrality[i] 
+        bc2 = group2_centrality[i]
+        bc_norm1 = bc1 / ((N - 1) * (N - 2))  
+        bc_norm2 = bc2 / ((N - 1) * (N - 2))
+        group1_centrality[i] = bc_norm1
+        group2_centrality[i] = bc_norm2
 
     # Perform Mann-Whitney U test between the nodes of both groups
     p_values = []
@@ -768,11 +778,6 @@ def compute_centrality_and_test(
         mean_sem_2 = f"{np.round(means_2[region],3)} ± {np.round(sem_2[region],3)}"
         table.append([roi_name, p_val, mean_sem_1, mean_sem_2])
     print(tabulate(table, headers=header, tablefmt="pretty"))
-
-    print(group1_centrality[:, 0])
-    print(group1_centrality[:, -1])
-    print(group2_centrality[:, 0])
-    print(group2_centrality[:, -1])
 
     # return (
     #     p_values,
