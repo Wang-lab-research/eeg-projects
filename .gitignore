@@ -9,11 +9,11 @@
 Chronic Low Back Pain Study/Misc/
 Chronic Low Back Pain Study/Notes/
 
-# Ignore miscellaneous code
+# Ignore miscellaneous code and other repos
 Code/Misc/
-
-# Ignore repos for all other projects besides eeg_toolkit
-Code/**
+Code/eeg-erds-stats/
+Code/eeg-unsup-pain-decoding/
+Code/purdonlabmeeg
 !Code/eeg_toolkit/
 
 # Ignore folder of unrelated iEEG study
@@ -33,7 +33,3 @@ mne.yaml
 
 # Ignore presentations
 Presentations/
-Chronic Low Back Pain Study/Code/Functional connectivity analysis/fc_widespread_pain.pdf
-Chronic Low Back Pain Study/Code/Functional connectivity analysis/FC_figures_MNE_Hand.pdf
-Chronic Low Back Pain Study/Code/Functional connectivity analysis/FC_figures_dSPM_Hand.pdf
-
