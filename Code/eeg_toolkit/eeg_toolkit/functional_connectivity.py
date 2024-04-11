@@ -333,10 +333,13 @@ def compute_sub_avg_con(
     conditions,
     condition_dict,
     roi_names,
-    connections_Bands,
+    Freq_bands,
     tmin,
     tmax,
     sfreq,
+    left_pain_ids=None,
+    right_pain_ids=None,
+    bilateral_pain_ids=None,
     include_LS=False,
 ):
     """
@@ -352,7 +355,7 @@ def compute_sub_avg_con(
         con_methods (list): List of connectivity methods to compute.
         conditions (list): List of conditions.
         roi_names (list): List of regions of interest names.
-        connections_Bands (dict): Dictionary of frequency bands.
+        Freq_bands (dict): Dictionary of frequency bands.
         tmin (float): The minimum time.
         tmax (float): The maximum time.
         sfreq (float): The sampling frequency.
@@ -381,8 +384,8 @@ def compute_sub_avg_con(
     label_ts_all.extend([label_ts_EO, label_ts_EC])
 
     # Get the frequency bands
-    fmins = [connections_Bands[f][0] for f in connections_Bands]
-    fmaxs = [connections_Bands[f][1] for f in connections_Bands]
+    fmins = [Freq_bands[f][0] for f in Freq_bands]
+    fmaxs = [Freq_bands[f][1] for f in Freq_bands]
 
     # Use only label_ts from overlap of condition_dict and conditions
     desired_conditions_ids = [v for k, v in condition_dict.items() if k in conditions]
@@ -412,7 +415,8 @@ def compute_sub_avg_con(
                 )
                 continue
 
-            for fmin, fmax, band_name in zip(fmins, fmaxs, connections_Bands):
+            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_bands
+    ):
                 # Set up the third level of the dictionary
                 sub_con_dict[condition][method][band_name] = {}
 
@@ -509,6 +513,9 @@ def compute_sub_avg_con(
 
                 print(f"*data shape = {data.shape}*")
 
+                # Laterality check
+                if "Eyes" in condition:
+                    if sub_id :
                 # Add result to dictionary
                 sub_con_dict[condition][method][band_name]["data"] = data
 
