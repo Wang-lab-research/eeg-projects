@@ -555,7 +555,7 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
                 group_dict[condition][method][band] = {}
 
                 # Initialize a list to hold data arrays
-                data_to_stack = np.empty(len(subjects))
+                data_to_stack = []
 
                 for i, subject in enumerate(subjects):
                     # Check if the data exists before adding it to the list
@@ -563,12 +563,14 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
                         sub_con_dict[subject][condition][method][band]["data"],
                         np.ndarray,
                     ):
-                        data_to_stack[i] = sub_con_dict[subject][condition][method][
-                            band
-                        ]["data"]
+                        data_to_stack.append(
+                            sub_con_dict[subject][condition][method][band]["data"]
+                        )
 
                 # Add result to dictionary
-                group_dict[condition][method][band]["data"] = np.stack(data_to_stack)
+                group_dict[condition][method][band]["data"] = np.stack(
+                    np.array(data_to_stack)
+                )
 
                 # Find the top 3 connections that occur most frequently
                 top_3_connections = [
@@ -700,6 +702,27 @@ def mann_whitney_test(
     return p_values, means_1, sem_1, means_2, sem_2
 
 
+def make_symmetric(matrix):
+    """
+    A function that takes a matrix and makes it symmetric by copying the lower triangle to the upper triangle.
+
+    Parameters:
+    - matrix: a numpy array representing the input matrix
+
+    Returns:
+    - symmetric_matrix: a numpy array that is the symmetric version of the input matrix
+    """
+    if matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("Matrix must be square")
+
+    # Copy the lower triangle to the upper triangle
+    lower_triangle = np.tril(matrix, -1)
+    upper_triangle = np.transpose(lower_triangle)
+    symmetric_matrix = lower_triangle + upper_triangle
+
+    return symmetric_matrix
+
+
 def compute_centrality_and_test(
     group1_stack,
     group2_stack,
@@ -711,6 +734,7 @@ def compute_centrality_and_test(
     Compute centrality measures for group1_stack and group2_stack.
 
     """
+
     # Round negative values before computing centrality
     if round_neg_vals:
         group1_stack[group1_stack < 0] = 0
@@ -723,17 +747,31 @@ def compute_centrality_and_test(
     min_nonzero = np.min(group2_stack[group2_stack > 0])
     group2_stack[group2_stack == 0] = min_nonzero
 
+    # Convert connectivity to connection-length matrix
+    group1_stack = 1 / group1_stack
+    group2_stack = 1 / group2_stack
+
     # Compute betweenness centrality  for each subject
     group1_centrality = np.empty((len(group1_stack), len(roi_acronyms)))
     group2_centrality = np.empty((len(group2_stack), len(roi_acronyms)))
 
     # For each subject, compute betweenness centrality
     for i in range(len(group1_stack)):
-        group1_centrality[i, :] = bct.betweenness_wei(group1_stack[i])
-        group2_centrality[i, :] = bct.betweenness_wei(group2_stack[i])
-        print(group1_stack[i])
-        print(group2_stack[i])
-        exit()
+        # Make adjacency matrix symmetric first
+        symm_1 = make_symmetric(group1_stack[i])
+        symm_2 = make_symmetric(group2_stack[i])
+
+        group1_centrality[i, :] = bct.betweenness_wei(symm_1)
+        group2_centrality[i, :] = bct.betweenness_wei(symm_2)
+
+        # Normalize betweenness centrality
+        N = len(roi_acronyms)
+        bc1 = group1_centrality[i]
+        bc2 = group2_centrality[i]
+        bc_norm1 = bc1 / ((N - 1) * (N - 2))
+        bc_norm2 = bc2 / ((N - 1) * (N - 2))
+        group1_centrality[i] = bc_norm1
+        group2_centrality[i] = bc_norm2
 
     # Perform Mann-Whitney U test between the nodes of both groups
     p_values = []
@@ -768,11 +806,6 @@ def compute_centrality_and_test(
         mean_sem_2 = f"{np.round(means_2[region],3)} ± {np.round(sem_2[region],3)}"
         table.append([roi_name, p_val, mean_sem_1, mean_sem_2])
     print(tabulate(table, headers=header, tablefmt="pretty"))
-
-    print(group1_centrality[:, 0])
-    print(group1_centrality[:, -1])
-    print(group2_centrality[:, 0])
-    print(group2_centrality[:, -1])
 
     # return (
     #     p_values,
