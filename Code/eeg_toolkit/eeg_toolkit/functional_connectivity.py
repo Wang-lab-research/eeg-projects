@@ -705,7 +705,7 @@ def mann_whitney_test(
 def make_symmetric(matrix):
     """
     A function that takes a matrix and makes it symmetric by copying the lower triangle to the upper triangle.
-    
+
     Parameters:
     - matrix: a numpy array representing the input matrix
 
@@ -758,9 +758,9 @@ def compute_centrality_and_test(
     # For each subject, compute betweenness centrality
     for i in range(len(group1_stack)):
         # Make adjacency matrix symmetric first
-        symm_1 = make_symmetric(group1_stack[i])  
+        symm_1 = make_symmetric(group1_stack[i])
         symm_2 = make_symmetric(group2_stack[i])
-        
+
         group1_centrality[i, :] = bct.betweenness_wei(symm_1)
         group2_centrality[i, :] = bct.betweenness_wei(symm_2)
 
