@@ -379,6 +379,22 @@ def compute_sub_avg_con(
     label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
     label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
 
+    ##############################################################################################
+    # Check laterality and adjust order of label time courses if necessary
+    if left_pain_ids is not None and sub_id in left_pain_ids:
+        print("Left pain, -rh is already contralateral")
+    elif right_pain_ids is not None and sub_id in right_pain_ids:
+        print("Right pain, -rh is now contralateral")
+        # Swap label_ts[2] and label_ts[8]
+        label_ts_EO[2], label_ts_EO[8] = label_ts_EO[8], label_ts_EO[2]
+        label_ts_EC[2], label_ts_EC[8] = label_ts_EC[8], label_ts_EC[2]
+    elif bilateral_pain_ids is not None and sub_id in bilateral_pain_ids:
+        print("Bilateral pain, -lh and -rh have been combined into contralateral")
+        avg_S1_EO = (label_ts_EO[2] + label_ts_EO[8]) / 2
+        label_ts_EO[2], label_ts_EO[8] = avg_S1_EO, avg_S1_EO
+        avg_S1_EC = (label_ts_EC[2] + label_ts_EC[8]) / 2
+        label_ts_EC[2], label_ts_EC[8] = avg_S1_EC, avg_S1_EC
+    
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
     label_ts_all.extend([label_ts_EO, label_ts_EC])
@@ -415,8 +431,7 @@ def compute_sub_avg_con(
                 )
                 continue
 
-            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_bands
-    ):
+            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_bands):
                 # Set up the third level of the dictionary
                 sub_con_dict[condition][method][band_name] = {}
 
@@ -513,12 +528,9 @@ def compute_sub_avg_con(
 
                 print(f"*data shape = {data.shape}*")
 
-                # Laterality check
-                if "Eyes" in condition:
-                    if sub_id :
                 # Add result to dictionary
                 sub_con_dict[condition][method][band_name]["data"] = data
-d
+
                 # Top 3 connections and their strengths
                 top_connections, strength = get_top_connections(data, method, n_top=3)
                 sub_con_dict[condition][method][band_name]["top 3"] = top_connections
@@ -734,6 +746,7 @@ def compute_centrality_and_test(
     group1_stack,
     group2_stack,
     roi_acronyms,
+    condition,
     round_neg_vals=True,
     method=None,
 ):
@@ -801,6 +814,11 @@ def compute_centrality_and_test(
         # Calculate SEM
         sem_1.append(stats.sem(group1_centrality[:, j]))
         sem_2.append(stats.sem(group2_centrality[:, j]))
+
+    # Adjust roi_acronyms for resting condition (contrallateral)
+    if "Eyes" in condition and "S1-lh" in roi_acronyms:
+        roi_acronyms[roi_acronyms.index("S1-lh")] = "S1-i"
+        roi_acronyms[roi_acronyms.index("S1-rh")] = "S1-c"
 
     # Print centrality results in table format
     print("\nBetweenness Centrality by Region:")
@@ -870,10 +888,9 @@ def plot_connectivity_circle(
     node_colors = [label.color for label in labels]
 
     # We reorder the labels based on their location in the left hemi
-    # label_names = [label.name for label in labels]
     label_names = roi_acronyms
-    lh_labels = [name for name in label_names if name.endswith("lh")]
-    rh_labels = [name for name in label_names if name.endswith("rh")]
+    lh_labels = label_names[: len(label_names) // 2]
+    rh_labels = label_names[len(label_names) // 2 :]
 
     # Get the y-location of the label
     label_ypos_lh = list()
@@ -881,24 +898,15 @@ def plot_connectivity_circle(
         data_idx = label_names.index(name)
         ypos = np.mean(labels[data_idx].pos[:, 1])
         label_ypos_lh.append(ypos)
-    try:
-        data_idx = label_names.index("Brain-Stem")
-    except ValueError:
-        pass
-    else:
-        ypos = np.mean(labels[data_idx].pos[:, 1])
-        lh_labels.append("Brain-Stem")
-        label_ypos_lh.append(ypos)
 
     # Reorder the labels based on their location
     lh_labels = [label for (yp, label) in sorted(zip(label_ypos_lh, lh_labels))]
 
     # For the right hemi
-    rh_labels = [
-        label[:-2] + "rh"
-        for label in lh_labels
-        if label != "Brain-Stem" and label[:-2] + "rh" in rh_labels
-    ]
+    rh_labels = [label[:-2]+'rh' for label in lh_labels]
+
+    # Adjust roi_acronyms for resting condition (contrallateral)
+    rh_labels[rh_labels.index("S1rh")] = "S1-c"
 
     # Save the plot order
     node_order = lh_labels[::-1] + rh_labels
@@ -1094,8 +1102,12 @@ def plot_connectivity_and_stats(
     # Set font sizes
     overlay_fontsize = 9
 
-    ###############################################################################
+    # Adjust roi_acronyms for resting condition (contrallateral)
+    if "Eyes" in condition and "S1-lh" in roi_acronyms:
+        roi_acronyms[roi_acronyms.index("S1-lh")] = "S1-i"
+        roi_acronyms[roi_acronyms.index("S1-rh")] = "S1-c"
 
+    ###############################################################################
     # Print table summary of mean and sem, if not plotting individual data
     if not isindividual:
         # Print the table summary
