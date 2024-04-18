@@ -333,6 +333,7 @@ def compute_sub_avg_con(
     conditions,
     condition_dict,
     roi_names,
+    roi_acronyms,
     Freq_bands,
     tmin,
     tmax,
@@ -379,6 +380,31 @@ def compute_sub_avg_con(
     label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
     label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
 
+    ##############################################################################################
+    # Check laterality and adjust order of label time courses
+    s1_lh_index = roi_acronyms.index("S1-lh")
+    s1_rh_index = roi_acronyms.index("S1-rh")
+    if left_pain_ids is not None and sub_id in left_pain_ids:
+        print("Left pain, -rh is already contralateral")
+    elif right_pain_ids is not None and sub_id in right_pain_ids:
+        print("Right pain, -rh is now contralateral")
+        # Swap label_ts[2] and label_ts[8]
+        label_ts_EO[[s1_lh_index, s1_rh_index]] = label_ts_EO[
+            [s1_rh_index, s1_lh_index]
+        ]
+        label_ts_EC[[s1_lh_index, s1_rh_index]] = label_ts_EC[
+            [s1_rh_index, s1_lh_index]
+        ]
+    elif bilateral_pain_ids is not None and sub_id in bilateral_pain_ids:
+        print("Bilateral pain, -lh and -rh have been combined into contralateral")
+        # Average -lh and -rh for S1 and set -rh to contralateral.
+        avg_S1_EO = (label_ts_EO[s1_lh_index] + label_ts_EO[s1_rh_index]) / 2
+        avg_S1_EC = (label_ts_EC[s1_lh_index] + label_ts_EC[s1_rh_index]) / 2
+        # Set contralateral as average. Do not alter S1-lh to avoid rank deficiency
+        label_ts_EO[s1_rh_index] = avg_S1_EO
+        label_ts_EC[s1_rh_index] = avg_S1_EC
+        # In next steps, bilateral subjects will be excluded from contributing S1-i data to the group stack
+        
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
     label_ts_all.extend([label_ts_EO, label_ts_EC])
@@ -415,8 +441,7 @@ def compute_sub_avg_con(
                 )
                 continue
 
-            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_bands
-    ):
+            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_bands):
                 # Set up the third level of the dictionary
                 sub_con_dict[condition][method][band_name] = {}
 
@@ -464,7 +489,7 @@ def compute_sub_avg_con(
                         tmax=tmax,
                         roi_names=roi_names,
                     )
-                    data = corr.reshape(len(roi_names), len(roi_names))
+                    data = corr.reshape(label_ts.shape[1], label_ts.shape[1])
                 elif method == "aec_symmetric":
                     if "Eyes" in condition and np.array(label_ts).ndim < 3:
                         label_ts_arr = np.array(label_ts)
@@ -480,8 +505,8 @@ def compute_sub_avg_con(
                         tmax=tmax,
                         roi_names=roi_names,
                     )
-                    data = corr.reshape(len(roi_names), len(roi_names))
-
+                    print(corr.shape)
+                    data = corr.reshape(label_ts.shape[1], label_ts.shape[1])
                 elif "Eyes" not in condition and "aec" not in method:
                     con = compute_connectivity_epochs(
                         label_ts,
@@ -509,16 +534,12 @@ def compute_sub_avg_con(
                     )
                     # reshape to roi x roi
                     data = con.get_data()
-                    data = data.reshape(len(roi_names), len(roi_names))
-
+                    data = corr.reshape(label_ts.shape[1], label_ts.shape[1])
                 print(f"*data shape = {data.shape}*")
 
-                # Laterality check
-                if "Eyes" in condition:
-                    if sub_id :
                 # Add result to dictionary
                 sub_con_dict[condition][method][band_name]["data"] = data
-d
+
                 # Top 3 connections and their strengths
                 top_connections, strength = get_top_connections(data, method, n_top=3)
                 sub_con_dict[condition][method][band_name]["top 3"] = top_connections
@@ -526,7 +547,15 @@ d
     return sub_con_dict
 
 
-def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
+def compute_group_con(
+    sub_con_dict,
+    conditions,
+    con_methods,
+    band_names,
+    left_pain_ids=None,
+    right_pain_ids=None,
+    bilateral_pain_ids=None,
+):
     """
     Compute the average connectivity for all subjects in each group, condition, method, and band.
 
@@ -541,7 +570,19 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
     group_dict = {}
 
     # Get the list of subjects
-    subjects = list(sub_con_dict.keys())
+    # Contralateral case
+    if (
+        left_pain_ids is not None
+        and right_pain_ids is not None
+        and bilateral_pain_ids is not None
+    ):
+        subjects = (
+            set(sub_con_dict.keys())
+            & set(left_pain_ids + right_pain_ids)
+            & set(bilateral_pain_ids)
+        )
+    else:
+        subjects = list(sub_con_dict.keys())
 
     # Iterate over all conditions, methods, and band names
     for condition in conditions:
@@ -630,15 +671,6 @@ def compute_group_con(sub_con_dict, conditions, con_methods, band_names):
 
 
 def get_method_plot_name(method):
-    """
-    Returns the plot name based on the method provided.
-
-    Args:
-        method (str): The method for which the plot name is to be retrieved.
-
-    Returns:
-        str: The plot name corresponding to the provided method, or the uppercase method if no match is found.
-    """
     method_dict = {
         "wpli2_debiased": "dwPLI",
         "dpli": "dPLI",
@@ -650,7 +682,15 @@ def get_method_plot_name(method):
 
 
 def mann_whitney_test(
-    group1_stack, group2_stack, roi_names, round_neg_vals=True, method=None
+    group1_stack, 
+    group2_stack, 
+    roi_acronyms,
+    sub_ids1=None,
+    sub_ids2=None,
+    condition=None,
+    bilateral_pain_ids=None,
+    round_neg_vals=True, 
+    method=None
 ):
     """
     Perform Mann-Whitney U test on group1_stack and group2_stack for each ROI combination.
@@ -658,7 +698,7 @@ def mann_whitney_test(
     Args:
         group1_stack: 3D array of data for group 1
         group2_stack: 3D array of data for group 2
-        roi_names: List of names for the regions of interest
+        roi_acronyms: List of names for the regions of interest
         method: Method for adjusting the data (default is None)
     Returns:
         p_values: Array of p-values for each ROI combination
@@ -668,12 +708,27 @@ def mann_whitney_test(
         sem_2: Standard error of the mean of group 2 data for each ROI combination
     """
 
-    n = len(roi_names)
+    # Initialize arrays for p-values, means, and standard error of the mean
+    n = len(roi_acronyms)
     p_values = np.zeros((n, n))
     means_1 = np.zeros((n, n))
     means_2 = np.zeros((n, n))
     sem_1 = np.zeros((n, n))
     sem_2 = np.zeros((n, n))
+
+    # Get indices for S1-i and S1-c
+    if 'Eyes' in condition:
+        s1_lh_index = roi_acronyms.index("S1-i")
+    
+        # Check if the subject is in the bilateral pain group
+        ignore_inds = np.where(np.in1d(sub_ids1, bilateral_pain_ids))[0]
+        group1_stack[ignore_inds, s1_lh_index, :] = np.nan
+        group2_stack[ignore_inds, :, s1_lh_index] = np.nan
+
+        # Repeat for group 2
+        ignore_inds = np.where(np.in1d(sub_ids2, bilateral_pain_ids))[0]
+        group2_stack[ignore_inds, s1_lh_index, :] = np.nan
+        group1_stack[ignore_inds, :, s1_lh_index] = np.nan
 
     for i in range(n):
         for j in range(n):
@@ -681,6 +736,10 @@ def mann_whitney_test(
             data1 = group1_stack[:, i, j]
             data2 = group2_stack[:, i, j]
 
+            # Ignore NaN values from subjects without S1-i
+            data1 = data1[~np.isnan(data1)]  
+            data2 = data2[~np.isnan(data2)]
+            
             # Round negative values
             if round_neg_vals:
                 print(data1)
@@ -712,10 +771,8 @@ def mann_whitney_test(
 def make_symmetric(matrix):
     """
     A function that takes a matrix and makes it symmetric by copying the lower triangle to the upper triangle.
-
     Parameters:
     - matrix: a numpy array representing the input matrix
-
     Returns:
     - symmetric_matrix: a numpy array that is the symmetric version of the input matrix
     """
@@ -734,33 +791,34 @@ def compute_centrality_and_test(
     group1_stack,
     group2_stack,
     roi_acronyms,
-    round_neg_vals=True,
+    condition,
+    sub_ids1=None,
+    sub_ids2=None,
+    bilateral_pain_ids=None,
     method=None,
 ):
     """
     Compute centrality measures for group1_stack and group2_stack.
-
     """
-
-    # Round negative values before computing centrality
-    if round_neg_vals:
-        group1_stack[group1_stack < 0] = 0
-        group2_stack[group2_stack < 0] = 0
 
     # Replace zero values with small value
     min_nonzero = np.min(group1_stack[group1_stack > 0])
-    group1_stack[group1_stack == 0] = min_nonzero
+    group1_stack[group1_stack <= 0] = min_nonzero
 
     min_nonzero = np.min(group2_stack[group2_stack > 0])
-    group2_stack[group2_stack == 0] = min_nonzero
+    group2_stack[group2_stack <= 0] = min_nonzero
 
     # Convert connectivity to connection-length matrix
     group1_stack = 1 / group1_stack
     group2_stack = 1 / group2_stack
 
-    # Compute betweenness centrality  for each subject
-    group1_centrality = np.empty((len(group1_stack), len(roi_acronyms)))
-    group2_centrality = np.empty((len(group2_stack), len(roi_acronyms)))
+    # Compute betweenness centrality for each region for each subject
+    group1_centrality = []
+    group2_centrality = []
+
+    # Get indices for S1-i and S1-c
+    if 'Eyes' in condition:
+        s1_lh_index = roi_acronyms.index("S1-i")
 
     # For each subject, compute betweenness centrality
     for i in range(len(group1_stack)):
@@ -768,8 +826,21 @@ def compute_centrality_and_test(
         symm_1 = make_symmetric(group1_stack[i])
         symm_2 = make_symmetric(group2_stack[i])
 
-        group1_centrality[i, :] = bct.betweenness_wei(symm_1)
-        group2_centrality[i, :] = bct.betweenness_wei(symm_2)
+        # Compute betweenness centrality
+        if 'Eyes' not in condition or sub_ids1[i] not in bilateral_pain_ids:
+            group1_centrality.append(bct.betweenness_wei(symm_1))
+        else:
+            sub_bc = bct.betweenness_wei(symm_1)
+            sub_bc[s1_lh_index] = np.nan
+            group1_centrality.append(sub_bc)
+
+        # Repeat for group 2
+        if 'Eyes' not in condition or sub_ids2[i] not in bilateral_pain_ids:
+            group2_centrality.append(bct.betweenness_wei(symm_2))
+        else:
+            sub_bc = bct.betweenness_wei(symm_2)
+            sub_bc[s1_lh_index] = np.nan
+            group2_centrality.append(sub_bc)
 
         # Normalize betweenness centrality
         N = len(roi_acronyms)
@@ -779,7 +850,12 @@ def compute_centrality_and_test(
         bc_norm2 = bc2 / ((N - 1) * (N - 2))
         group1_centrality[i] = bc_norm1
         group2_centrality[i] = bc_norm2
+        
 
+    # Convert centrality lists to arrays
+    group1_centrality = np.array(group1_centrality)
+    group2_centrality = np.array(group2_centrality)
+    
     # Perform Mann-Whitney U test between the nodes of both groups
     p_values = []
     means_1 = []
@@ -790,23 +866,29 @@ def compute_centrality_and_test(
         data1 = group1_centrality[:, j]
         data2 = group2_centrality[:, j]
 
+        # Ignore NaN values from subjects without S1-i
+        data1 = data1[~np.isnan(data1)]  
+        data2 = data2[~np.isnan(data2)]
+                
         # Test using Mann-Whitney U
         u, p = stats.mannwhitneyu(data1, data2)
         p_values.append(p)
 
         # Calculate means
-        means_1.append(np.mean(group1_centrality[:, j]))
-        means_2.append(np.mean(group2_centrality[:, j]))
-
+        means_1.append(np.mean(data1))
+        means_2.append(np.mean(data2))
+        
         # Calculate SEM
-        sem_1.append(stats.sem(group1_centrality[:, j]))
-        sem_2.append(stats.sem(group2_centrality[:, j]))
+        sem_1.append(stats.sem(data1))
+        sem_2.append(stats.sem(data2))
 
     # Print centrality results in table format
     print("\nBetweenness Centrality by Region:")
     header = ["ROI", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
     table = []
     for region in range(len(roi_acronyms)):
+        if p_values[region] >= 0.05:
+            continue
         roi_name = roi_acronyms[region]
         p_val = f"{np.round(p_values[region],4)}"
         mean_sem_1 = f"{np.round(means_1[region],3)} ± {np.round(sem_1[region],3)}"
@@ -870,10 +952,10 @@ def plot_connectivity_circle(
     node_colors = [label.color for label in labels]
 
     # We reorder the labels based on their location in the left hemi
-    # label_names = [label.name for label in labels]
     label_names = roi_acronyms
-    lh_labels = [name for name in label_names if name.endswith("lh")]
-    rh_labels = [name for name in label_names if name.endswith("rh")]
+    lh_labels = [
+        label for label in label_names if label.endswith("lh") or label.endswith("-i")
+    ]
 
     # Get the y-location of the label
     label_ypos_lh = list()
@@ -881,26 +963,17 @@ def plot_connectivity_circle(
         data_idx = label_names.index(name)
         ypos = np.mean(labels[data_idx].pos[:, 1])
         label_ypos_lh.append(ypos)
-    try:
-        data_idx = label_names.index("Brain-Stem")
-    except ValueError:
-        pass
-    else:
-        ypos = np.mean(labels[data_idx].pos[:, 1])
-        lh_labels.append("Brain-Stem")
-        label_ypos_lh.append(ypos)
 
     # Reorder the labels based on their location
     lh_labels = [label for (yp, label) in sorted(zip(label_ypos_lh, lh_labels))]
 
     # For the right hemi
-    rh_labels = [
-        label[:-2] + "rh"
-        for label in lh_labels
-        if label != "Brain-Stem" and label[:-2] + "rh" in rh_labels
-    ]
+    rh_labels = [label[:-2] + "rh" for label in lh_labels]
 
-    # Save the plot order
+    # If resting state, change S1-lh and S1-rh to S1-i and S1-c
+    if "Eyes" in condition:
+        rh_labels[rh_labels.index("S1rh")] = "S1-c"
+   
     node_order = lh_labels[::-1] + rh_labels
 
     # Circular layout
@@ -966,7 +1039,7 @@ def get_top_connections(data, method, n_top=3):
 
     # Iterate over the lower triangle of the matrix
     top_connections = []
-    for i in range(0, 12):
+    for i in range(0, len(data)):
         for j in range(
             0, i + 1
         ):  # Start from 0 to i to exclude the diagonal and upper triangle
@@ -1095,7 +1168,6 @@ def plot_connectivity_and_stats(
     overlay_fontsize = 9
 
     ###############################################################################
-
     # Print table summary of mean and sem, if not plotting individual data
     if not isindividual:
         # Print the table summary
@@ -1169,7 +1241,7 @@ def plot_connectivity_and_stats(
                     print(
                         f"Method {method} not supported for vmin and vmax calculation."
                     )
-                    # exit()
+
         else:
             # set from arguments + the preset for p-value plot
             if data_idx == pval_pos:
