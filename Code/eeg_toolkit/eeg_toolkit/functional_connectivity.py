@@ -334,7 +334,7 @@ def compute_sub_avg_con(
     condition_dict,
     roi_names,
     roi_acronyms,
-    Freq_bands,
+    Freq_Bands,
     tmin,
     tmax,
     sfreq,
@@ -356,7 +356,7 @@ def compute_sub_avg_con(
         con_methods (list): List of connectivity methods to compute.
         conditions (list): List of conditions.
         roi_names (list): List of regions of interest names.
-        Freq_bands (dict): Dictionary of frequency bands.
+        Freq_Bands (dict): Dictionary of frequency bands.
         tmin (float): The minimum time.
         tmax (float): The maximum time.
         sfreq (float): The sampling frequency.
@@ -410,8 +410,8 @@ def compute_sub_avg_con(
     label_ts_all.extend([label_ts_EO, label_ts_EC])
 
     # Get the frequency bands
-    fmins = [Freq_bands[f][0] for f in Freq_bands]
-    fmaxs = [Freq_bands[f][1] for f in Freq_bands]
+    fmins = [Freq_Bands[f][0] for f in Freq_Bands]
+    fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
     # Use only label_ts from overlap of condition_dict and conditions
     desired_conditions_ids = [v for k, v in condition_dict.items() if k in conditions]
@@ -441,7 +441,7 @@ def compute_sub_avg_con(
                 )
                 continue
 
-            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_bands):
+            for fmin, fmax, band_name in zip(fmins, fmaxs, Freq_Bands):
                 # Set up the third level of the dictionary
                 sub_con_dict[condition][method][band_name] = {}
 
@@ -722,13 +722,14 @@ def mann_whitney_test(
     
         # Check if the subject is in the bilateral pain group
         ignore_inds = np.where(np.in1d(sub_ids1, bilateral_pain_ids))[0]
+        
         group1_stack[ignore_inds, s1_lh_index, :] = np.nan
-        group2_stack[ignore_inds, :, s1_lh_index] = np.nan
+        group1_stack[ignore_inds, :, s1_lh_index] = np.nan
 
         # Repeat for group 2
         ignore_inds = np.where(np.in1d(sub_ids2, bilateral_pain_ids))[0]
         group2_stack[ignore_inds, s1_lh_index, :] = np.nan
-        group1_stack[ignore_inds, :, s1_lh_index] = np.nan
+        group2_stack[ignore_inds, :, s1_lh_index] = np.nan
 
     for i in range(n):
         for j in range(n):
