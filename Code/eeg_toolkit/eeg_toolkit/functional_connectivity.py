@@ -1115,6 +1115,11 @@ def plot_connectivity_and_stats(
     - round_neg_vals: bool, whether to round negative values (default=False).
     """
     ###############################################################################
+    ### FOR PERMUTATION TESTING ###
+    sig_pairs = []
+    table2 = []
+    ###############################
+
     ### Settings ###
     # Determine whether data provided is individual data or group data
     isindividual = True if means_2 is None else False
@@ -1184,7 +1189,9 @@ def plot_connectivity_and_stats(
             mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
 
             table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
+            table2.append([roi_acronyms[region_pair[0]], roi_acronyms[region_pair[1]], p_val, mean_sem_1, mean_sem_2])
         print(tabulate(table, headers=header, tablefmt="pretty"))
+        sig_pairs = table2
     else:
         print(f"Top 3 Connections in {group_names} group")
         header = ["Top connections", f"{method} Value"]
@@ -1344,3 +1351,4 @@ def plot_connectivity_and_stats(
             fig.savefig(os.path.join(save_path, filename), bbox_inches="tight", dpi=300)
         plt.show()
         plt.close()
+    return sig_pairs
