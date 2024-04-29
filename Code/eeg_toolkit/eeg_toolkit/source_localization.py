@@ -147,7 +147,7 @@ def apply_inverse_and_save(
             print(f"Saving stc.mat for {sub_id} in region: {labels[i].name}")
             label_ts_i = label_ts[:, i, :]
             print("*label_ts_i shape = ", label_ts_i.shape)
-            
+
             # Save STC Zepochs per region
             matfiledata = {"data": label_ts_i}
             save_fname = f"{labels[i].name}_{condition}.mat"
@@ -230,8 +230,8 @@ def compute_fwd_and_inv(
 
         inverse_operator = mne.minimum_norm.make_inverse_operator(
             mne_object.info, fwd, noise_cov, verbose=True
-        ) 
-        
+        )
+
         label_ts, sub_id_if_nan = apply_inverse_and_save(
             mne_object,
             inverse_operator,
@@ -373,7 +373,7 @@ def to_source(
             zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
             # print shape of zepochs
             print(zepochs.get_data().shape)
-            
+
             print("Source localizing epochs...")
             label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
                 sub_id,
@@ -400,7 +400,7 @@ def to_source(
             zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
             # print shape of zepochs
             print(zepochs.get_data().shape)
-            
+
             print("Source localizing epochs...")
             label_ts_Epochs, sub_id_if_nan = compute_fwd_and_inv(
                 sub_id,
