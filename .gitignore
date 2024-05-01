@@ -34,3 +34,5 @@ mne.yaml
 # Ignore presentations
 Presentations/
 Chronic Low Back Pain Study/EEG Preprocessing Steps.docx
+Chronic Low Back Pain Study/Code/Functional connectivity analysis/Connectivity circle/*.png
+Chronic Low Back Pain Study/Code/Functional connectivity analysis/Connectivity circle/*.pdf
