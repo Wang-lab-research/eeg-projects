@@ -335,8 +335,6 @@ def compute_sub_avg_con(
     roi_names,
     roi_acronyms,
     Freq_Bands,
-    tmin,
-    tmax,
     sfreq,
     left_pain_ids=None,
     right_pain_ids=None,
@@ -364,6 +362,10 @@ def compute_sub_avg_con(
     Returns:
         dict: A dictionary containing the connectivity sub_con_dict for each condition, method, and frequency band.
     """
+    # Set tmax 
+    tmin = 0.0
+    tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
+    tmax_resting = 3*60 # resting condition is 3 minutes long 
 
     # Initialize dictionary for this subject
     sub_con_dict = {}
@@ -423,6 +425,10 @@ def compute_sub_avg_con(
     for label_ts, condition in zip(desired_label_ts, conditions):
         # Set up the first level of the dictionary
         sub_con_dict[condition] = {}
+        
+        # Set tmax based on condition
+        tmax = tmax_epo if condition == "Hand 256 mN" else tmax_resting
+        
         for method in con_methods:
             # Set up the second level of the dictionary
             num_epochs = len(label_ts)
