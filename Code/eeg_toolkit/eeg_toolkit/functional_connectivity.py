@@ -378,7 +378,7 @@ def compute_sub_avg_con(
 
     # Resting state
     label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
-    label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
+    # label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
 
     ##############################################################################################
     # Check laterality and adjust order of label time courses
@@ -392,22 +392,24 @@ def compute_sub_avg_con(
         label_ts_EO[[s1_lh_index, s1_rh_index]] = label_ts_EO[
             [s1_rh_index, s1_lh_index]
         ]
-        label_ts_EC[[s1_lh_index, s1_rh_index]] = label_ts_EC[
-            [s1_rh_index, s1_lh_index]
-        ]
+        # label_ts_EC[[s1_lh_index, s1_rh_index]] = label_ts_EC[
+        #     [s1_rh_index, s1_lh_index]
+        # ]
     elif bilateral_pain_ids is not None and sub_id in bilateral_pain_ids:
         print("Bilateral pain, -lh and -rh have been combined into contralateral")
         # Average -lh and -rh for S1 and set -rh to contralateral.
         avg_S1_EO = (label_ts_EO[s1_lh_index] + label_ts_EO[s1_rh_index]) / 2
-        avg_S1_EC = (label_ts_EC[s1_lh_index] + label_ts_EC[s1_rh_index]) / 2
+        # avg_S1_EC = (label_ts_EC[s1_lh_index] + label_ts_EC[s1_rh_index]) / 2
         # Set contralateral as average. Do not alter S1-lh to avoid rank deficiency
         label_ts_EO[s1_rh_index] = avg_S1_EO
-        label_ts_EC[s1_rh_index] = avg_S1_EC
+        # label_ts_EC[s1_rh_index] = avg_S1_EC
         # In next steps, bilateral subjects will be excluded from contributing S1-i data to the group stack
         
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
-    label_ts_all.extend([label_ts_EO, label_ts_EC])
+    label_ts_all.extend([label_ts_EO, 
+                        #  label_ts_EC,
+                         ])
 
     # Get the frequency bands
     fmins = [Freq_Bands[f][0] for f in Freq_Bands]
