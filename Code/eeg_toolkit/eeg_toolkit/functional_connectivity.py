@@ -233,7 +233,15 @@ def bp_gen(
         )
 
 
-def compute_aec(method, label_ts, sfreq, fmin, fmax, tmin, tmax, roi_names):
+def compute_aec(method, 
+                label_ts, 
+                sfreq, 
+                fmin, 
+                fmax, 
+                tmin, 
+                tmax, 
+                roi_names,
+                orthogonalize_AEC=True):
     """
     Compute the correlation between regions of interest (ROIs) using different methods.
 
@@ -263,7 +271,10 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, tmin, tmax, roi_names):
         corr = corr_obj.combine()
         corr = corr.get_data(output="dense")[:, :, 0]
     if method == "aec_symmetric":
-        label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
+        if orthogonalize_AEC:
+            label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
+        else:
+            label_ts_orth = label_ts
         corr_obj = envelope_correlation(
             bp_gen(label_ts_orth, sfreq, fmin, fmax, tmin, tmax), orthogonalize=False
         )
@@ -335,9 +346,8 @@ def compute_sub_avg_con(
     roi_names,
     roi_acronyms,
     Freq_Bands,
-    tmin,
-    tmax,
     sfreq,
+    orthogonalize_AEC=True,
     left_pain_ids=None,
     right_pain_ids=None,
     bilateral_pain_ids=None,
@@ -364,6 +374,10 @@ def compute_sub_avg_con(
     Returns:
         dict: A dictionary containing the connectivity sub_con_dict for each condition, method, and frequency band.
     """
+    # Set tmax 
+    tmin = 0.0
+    tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
+    tmax_resting = 3*60 # resting condition is 3 minutes long 
 
     # Initialize dictionary for this subject
     sub_con_dict = {}
@@ -378,7 +392,7 @@ def compute_sub_avg_con(
 
     # Resting state
     label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
-    label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
+    # label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
 
     ##############################################################################################
     # Check laterality and adjust order of label time courses
@@ -392,22 +406,24 @@ def compute_sub_avg_con(
         label_ts_EO[[s1_lh_index, s1_rh_index]] = label_ts_EO[
             [s1_rh_index, s1_lh_index]
         ]
-        label_ts_EC[[s1_lh_index, s1_rh_index]] = label_ts_EC[
-            [s1_rh_index, s1_lh_index]
-        ]
+        # label_ts_EC[[s1_lh_index, s1_rh_index]] = label_ts_EC[
+        #     [s1_rh_index, s1_lh_index]
+        # ]
     elif bilateral_pain_ids is not None and sub_id in bilateral_pain_ids:
         print("Bilateral pain, -lh and -rh have been combined into contralateral")
         # Average -lh and -rh for S1 and set -rh to contralateral.
         avg_S1_EO = (label_ts_EO[s1_lh_index] + label_ts_EO[s1_rh_index]) / 2
-        avg_S1_EC = (label_ts_EC[s1_lh_index] + label_ts_EC[s1_rh_index]) / 2
+        # avg_S1_EC = (label_ts_EC[s1_lh_index] + label_ts_EC[s1_rh_index]) / 2
         # Set contralateral as average. Do not alter S1-lh to avoid rank deficiency
         label_ts_EO[s1_rh_index] = avg_S1_EO
-        label_ts_EC[s1_rh_index] = avg_S1_EC
+        # label_ts_EC[s1_rh_index] = avg_S1_EC
         # In next steps, bilateral subjects will be excluded from contributing S1-i data to the group stack
         
     # Unpack label_ts for each site and stimulus level
     label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
-    label_ts_all.extend([label_ts_EO, label_ts_EC])
+    label_ts_all.extend([label_ts_EO, 
+                        #  label_ts_EC,
+                         ])
 
     # Get the frequency bands
     fmins = [Freq_Bands[f][0] for f in Freq_Bands]
@@ -421,6 +437,10 @@ def compute_sub_avg_con(
     for label_ts, condition in zip(desired_label_ts, conditions):
         # Set up the first level of the dictionary
         sub_con_dict[condition] = {}
+        
+        # Set tmax based on condition
+        tmax = tmax_epo if condition == "Hand 256 mN" else tmax_resting
+        
         for method in con_methods:
             # Set up the second level of the dictionary
             num_epochs = len(label_ts)
@@ -488,6 +508,7 @@ def compute_sub_avg_con(
                         tmin=tmin,
                         tmax=tmax,
                         roi_names=roi_names,
+                        orthogonalize_AEC=orthogonalize_AEC,
                     )
                     data = corr.reshape(label_ts.shape[1], label_ts.shape[1])
                 elif method == "aec_symmetric":
@@ -504,6 +525,7 @@ def compute_sub_avg_con(
                         tmin=tmin,
                         tmax=tmax,
                         roi_names=roi_names,
+                        orthogonalize_AEC=orthogonalize_AEC,
                     )
                     print(corr.shape)
                     data = corr.reshape(label_ts.shape[1], label_ts.shape[1])
