@@ -233,7 +233,15 @@ def bp_gen(
         )
 
 
-def compute_aec(method, label_ts, sfreq, fmin, fmax, tmin, tmax, roi_names):
+def compute_aec(method, 
+                label_ts, 
+                sfreq, 
+                fmin, 
+                fmax, 
+                tmin, 
+                tmax, 
+                roi_names,
+                orthogonalize_AEC=True):
     """
     Compute the correlation between regions of interest (ROIs) using different methods.
 
@@ -263,7 +271,10 @@ def compute_aec(method, label_ts, sfreq, fmin, fmax, tmin, tmax, roi_names):
         corr = corr_obj.combine()
         corr = corr.get_data(output="dense")[:, :, 0]
     if method == "aec_symmetric":
-        label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
+        if orthogonalize_AEC:
+            label_ts_orth = mne_conn.envelope.symmetric_orth(label_ts)
+        else:
+            label_ts_orth = label_ts
         corr_obj = envelope_correlation(
             bp_gen(label_ts_orth, sfreq, fmin, fmax, tmin, tmax), orthogonalize=False
         )
@@ -336,6 +347,7 @@ def compute_sub_avg_con(
     roi_acronyms,
     Freq_Bands,
     sfreq,
+    orthogonalize_AEC=True,
     left_pain_ids=None,
     right_pain_ids=None,
     bilateral_pain_ids=None,
@@ -496,6 +508,7 @@ def compute_sub_avg_con(
                         tmin=tmin,
                         tmax=tmax,
                         roi_names=roi_names,
+                        orthogonalize_AEC=orthogonalize_AEC,
                     )
                     data = corr.reshape(label_ts.shape[1], label_ts.shape[1])
                 elif method == "aec_symmetric":
@@ -512,6 +525,7 @@ def compute_sub_avg_con(
                         tmin=tmin,
                         tmax=tmax,
                         roi_names=roi_names,
+                        orthogonalize_AEC=orthogonalize_AEC,
                     )
                     print(corr.shape)
                     data = corr.reshape(label_ts.shape[1], label_ts.shape[1])
