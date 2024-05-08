@@ -377,7 +377,7 @@ def compute_sub_avg_con(
     # Set tmax 
     tmin = 0.0
     tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
-    tmax_resting = 3*60 # resting condition is 3 minutes long 
+    tmax_resting = 5*60 # resting condition is 3 minutes long 
 
     # Initialize dictionary for this subject
     sub_con_dict = {}

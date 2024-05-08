@@ -177,7 +177,7 @@ def compute_fwd_and_inv(
     src,
     bem,
     mne_object,
-    noise_cov,
+    noise_cov_diag,
     labels,
     save_path,
     save_fname,
@@ -197,7 +197,7 @@ def compute_fwd_and_inv(
         src (str): The path to the source space file.
         bem (str): The path to the BEM model file.
         mne_object (MNE object): The MNE object containing the data.
-        noise_cov (MNE object): The noise covariance matrix.
+        noise_cov_diag (MNE object): The noise covariance matrix.
         labels (list of str): The labels to save the time course for.
         save_path (str): The path to save the time course data.
         average_dipoles (bool, optional): Whether to average dipoles (default: True).
@@ -229,7 +229,7 @@ def compute_fwd_and_inv(
         utils.clear_display()
 
         inverse_operator = mne.minimum_norm.make_inverse_operator(
-            mne_object.info, fwd, noise_cov, verbose=True
+            mne_object.info, fwd, noise_cov_diag, verbose=True
         )
 
         label_ts, sub_id_if_nan = apply_inverse_and_save(
@@ -298,10 +298,15 @@ def to_source(
     tmin, tmax, bmax = times_tup
 
     # Compute noise & data covariance
-    noise_segment = load_raw(data_path, sub_id, condition="noise")
-    noise_cov = mne.compute_raw_covariance(noise_segment, verbose=True)
+    eo_segment = load_raw(data_path, sub_id, condition="eyes_open")
+    noise_cov = mne.compute_raw_covariance(eo_segment, verbose=True)
     # Regularize the covariance matrices
-    noise_cov = mne.cov.regularize(noise_cov, noise_segment.info, eeg=0.1, verbose=True)
+    noise_cov = mne.cov.regularize(noise_cov, eo_segment.info, eeg=0.1, verbose=True)
+    
+    # Extract the diagonal elements  
+    noise_cov_diag = mne.Covariance(np.diag(np.diag(noise_cov.data)), noise_cov.ch_names,   
+                                    noise_cov.bads, noise_cov.projs, noise_cov.nfree)  
+    
 
     #################################################################################################
 
@@ -332,7 +337,7 @@ def to_source(
             src,
             bem,
             raw_eo,
-            noise_cov,
+            noise_cov_diag,
             labels,
             EO_resting_save_path,
             EO_save_fname,
@@ -354,7 +359,7 @@ def to_source(
             src,
             bem,
             raw_ec,
-            noise_cov,
+            noise_cov_diag,
             labels,
             EC_resting_save_path,
             EC_save_fname,
@@ -383,7 +388,7 @@ def to_source(
                 src,
                 bem,
                 zepochs,
-                noise_cov,
+                noise_cov_diag,
                 labels,
                 zscored_epochs_save_path,
                 zepochs_save_fname,
@@ -410,7 +415,7 @@ def to_source(
                 src,
                 bem,
                 zepochs,
-                noise_cov,
+                noise_cov_diag,
                 labels,
                 zscored_epochs_save_path,
                 zepochs_save_fname,
