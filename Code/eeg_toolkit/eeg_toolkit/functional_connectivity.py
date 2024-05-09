@@ -377,8 +377,8 @@ def compute_sub_avg_con(
     # Set tmax 
     tmin = 0.0
     tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
-    tmax_resting = 5*60 # resting condition is 3 minutes long 
-
+    tmax_resting = 5*60
+    
     # Initialize dictionary for this subject
     sub_con_dict = {}
 
@@ -392,6 +392,9 @@ def compute_sub_avg_con(
 
     # Resting state
     label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
+
+    # tmax_resting = len(label_ts_EO[0]) 
+
     # label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
 
     ##############################################################################################
