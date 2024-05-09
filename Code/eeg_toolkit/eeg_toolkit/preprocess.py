@@ -93,7 +93,7 @@ def crop_by_resting_times(raw, start, stop, sub_id, save_path, category):
     return cropped
 
 
-def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path):
+def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path, include_noise=True):
     """
     Function purpose: Create recording of the full resting EEG
     Inputs: sub_id = subject ID ie the patient number,
@@ -109,6 +109,8 @@ def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path):
         print(f"No CSV for {sub_id} found, no cropped recordings created")
         return None
 
+    print(f"Loading CSV for {sub_id}")
+    
     EC_start, EC_stop, EO_start, EO_stop = timestamp_csv["Seconds"][0:4]
 
     # Establish timestamps assuming enough recorded for 5 mins of eyes open noise = 2 mins, EO = 3 mins
@@ -134,23 +136,34 @@ def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path):
 
     # Send message if eyes closed is shorter than 3 mins, otherwise default is 3 min eyes closed recording
     if (EC_stop - EC_start) < 180:
-        print(
-            f"Eyes closed is not longer than 3 mins. Length of EC reading is: {EC_stop- EC_start} seconds."
-        )
+        if include_noise:
+            print(
+                f"Eyes closed is not longer than 3 mins. Length of EC reading is: {EC_stop- EC_start} seconds."
+            )
     else:
         EC_stop = EC_start + 180
 
-    # Crop and save the cropped raw data to a raw.fif file
-    EC_cropped = crop_by_resting_times(
-        raw, EC_start, EC_stop, sub_id, save_path, "eyes_closed"
-    )
-    noise_cropped = crop_by_resting_times(
-        raw, noise_start, noise_stop, sub_id, save_path, "noise"
-    )
-    EO_cropped = crop_by_resting_times(
-        raw, cropped_EO_start, cropped_EO_stop, sub_id, save_path, "eyes_open"
-    )
-
+    print(f"Cropping files for {sub_id}\n")
+    
+    # Include noise or not
+    if include_noise:    
+        # Crop and save the cropped raw data to a raw.fif file
+        EC_cropped = crop_by_resting_times(
+            raw, EC_start, EC_stop, sub_id, save_path, "eyes_closed"
+        )
+        noise_cropped = crop_by_resting_times(
+            raw, noise_start, noise_stop, sub_id, save_path, "noise"
+        )
+        EO_cropped = crop_by_resting_times(
+            raw, cropped_EO_start, cropped_EO_stop, sub_id, save_path, "eyes_open"
+        )
+    else:
+        # Crop and save the cropped raw data to a raw.fif file
+        EO_cropped = crop_by_resting_times(
+            raw, EO_start, EO_stop, sub_id, save_path, "eyes_open"
+        )
+        EC_cropped = None
+        noise_cropped = None
     return EC_cropped, noise_cropped, EO_cropped
 
 
@@ -197,7 +210,7 @@ def remove_trailing_zeros(raw, sub_id, sfreq):
     return raw, need_crop
 
 
-def to_raw(data_path, sub_id, save_path, csv_path):
+def to_raw(data_path, sub_id, save_path, csv_path, include_noise):
     """
     Preprocess raw EDF data to filtered FIF format.
     """
@@ -386,7 +399,7 @@ def to_raw(data_path, sub_id, save_path, csv_path):
         noise_recording,
         eyes_open_recording,
     ) = get_cropped_resting_EEGs(
-        sub_id, raw, csv_path, save_path
+        sub_id, raw, csv_path, save_path, include_noise=include_noise
     )  # get_cropped_resting_EEGs saves the three resting recordings into same folder as raw
 
     # No need to save raw anymore, saving the cropped files instead
