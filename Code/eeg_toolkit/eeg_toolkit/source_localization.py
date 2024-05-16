@@ -316,7 +316,7 @@ def to_source(
     #################################################################################################
 
     # TODO: Control regions only?
-    control_regions = True
+    control_regions = False
     
     # If processing resting, check directories for count
     raw = load_raw(processed_data_path, sub_id, condition="preprocessed")
