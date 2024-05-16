@@ -303,13 +303,23 @@ def to_source(
     # Regularize the covariance matrices
     noise_cov = mne.cov.regularize(noise_cov, eo_segment.info, eeg=0.1, verbose=True)
 
+    # Create the noise covariance
+    data=np.diag(np.diag(noise_cov.data))
+    names=eo_segment.info["ch_names"]
+    bads=eo_segment.info["bads"]
+    projs=eo_segment.info["projs"]
+    nfree=data.shape[0]
+
+    # keep only good channels
+    good_names = [name for name in names if name not in bads]
+    
     # Extract the diagonal elements
     noise_var = mne.Covariance(
-        data=np.diag(np.diag(noise_cov.data)),
-        names=eo_segment.info["ch_names"],
-        bads=eo_segment.info["bads"],
-        projs=eo_segment.info["projs"],
-        nfree=eo_segment.info["nchan"],
+        data=data,
+        names=good_names,
+        bads=bads,
+        projs=projs,
+        nfree=nfree,
         verbose=True,
     )
 
