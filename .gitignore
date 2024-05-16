@@ -1,6 +1,7 @@
 # Ignore all large data
 **/Data/*
 **/Processed Data/
+Lupus*/Data/
 
 # Allow timestamps
 !Chronic Low Back Pain Study/Data/Eyes Timestamps/

@@ -23,24 +23,24 @@ model_fname = os.path.join(fs_dir, "bem", "fsaverage-5120-5120-5120-bem.fif")
 snr = 1.0  # for non-averaged data
 
 
-def load_raw(data_path, sub_id, condition):
+def load_raw(processed_data_path, sub_id, condition):
     """
     Load a raw data file and preprocess it.
     """
     sub_fname = f"{sub_id}_{condition}-raw.fif"
-    raw_path = os.path.join(data_path, sub_fname)
+    raw_path = os.path.join(processed_data_path, sub_fname)
     raw = mne.io.read_raw_fif(raw_path, preload=True)
     raw.set_eeg_reference("average", projection=True)
     return raw
 
 
-def zscore_epochs(sub_id, data_path, tmin, raw):
+def zscore_epochs(sub_id, processed_data_path, tmin, raw):
     """
     Calculate the z-scores for each epoch in the given EEG dataset.
 
     Args:
         sub_id (str): The subject ID.
-        data_path (str): The path to the data directory.
+        processed_data_path (str): The path to the data directory.
         tmin (float): The start time of the epochs in seconds.
         raw (mne.Raw): The raw EEG data.
 
@@ -52,7 +52,7 @@ def zscore_epochs(sub_id, data_path, tmin, raw):
 
     """
     epochs_fname = f"{sub_id}_preprocessed-epo.fif"
-    epochs = mne.read_epochs(os.path.join(data_path, epochs_fname))
+    epochs = mne.read_epochs(os.path.join(processed_data_path, epochs_fname))
     epochs.set_eeg_reference("average", projection=True)
 
     data_epochs = epochs.get_data()
@@ -255,7 +255,7 @@ def compute_fwd_and_inv(
 
 def to_source(
     sub_id,
-    data_path,
+    processed_data_path,
     zscored_epochs_save_path,
     EC_resting_save_path,
     EO_resting_save_path,
@@ -273,7 +273,7 @@ def to_source(
     Compute the source localization for a subject for eyes closed, eyes open, and z-scored epochs.
     Args:
         sub_id (str): The ID of the subject.
-        data_path (str): The path to the data.
+        processed_data_path (str): The path to the data.
         zscored_epochs_save_path (str): The path to save the Z-scored epochs.
         EC_resting_save_path (str): The path to save the EC resting state data.
         EO_resting_save_path (str): The path to save the EO resting state data.
@@ -298,7 +298,7 @@ def to_source(
     tmin, tmax, bmax = times_tup
 
     # Compute noise & data covariance
-    eo_segment = load_raw(data_path, sub_id, condition="eyes_open")
+    eo_segment = load_raw(processed_data_path, sub_id, condition="eyes_open")
     noise_cov = mne.compute_raw_covariance(eo_segment, verbose=True)
     # Regularize the covariance matrices
     noise_cov = mne.cov.regularize(noise_cov, eo_segment.info, eeg=0.1, verbose=True)
@@ -315,17 +315,20 @@ def to_source(
 
     #################################################################################################
 
+    # TODO: Control regions only?
+    control_regions = True
+    
     # If processing resting, check directories for count
-    raw = load_raw(data_path, sub_id, condition="preprocessed")
+    raw = load_raw(processed_data_path, sub_id, condition="preprocessed")
     if return_EO_resting:
-        raw_eo = load_raw(data_path, sub_id, condition="eyes_open")
-        EO_save_fname = f"{sub_id}_eyes_open.pkl"
+        raw_eo = load_raw(processed_data_path, sub_id, condition="eyes_open")
+        EO_save_fname = f"{sub_id}_eyes_open.pkl" if not control_regions else f"{sub_id}_eyes_open_control.pkl"
     if return_EC_resting:
-        raw_ec = load_raw(data_path, sub_id, condition="eyes_closed")
-        EC_save_fname = f"{sub_id}_eyes_closed.pkl"
+        raw_ec = load_raw(processed_data_path, sub_id, condition="eyes_closed")
+        EC_save_fname = f"{sub_id}_eyes_closed.pkl" if not control_regions else f"{sub_id}_eyes_closed_control.pkl"
     # If processing epochs, check directory for count
     if return_zepochs:
-        zepochs_save_fname = f"{sub_id}_epochs.pkl"
+        zepochs_save_fname = f"{sub_id}_epochs.pkl" if not control_regions else f"{sub_id}_epochs_control.pkl"
 
     # Preallocate
     label_ts_EO, label_ts_EC, label_ts_Epochs = None, None, None
@@ -380,7 +383,7 @@ def to_source(
             f"{zscored_epochs_save_path}/{zepochs_save_fname}"
         ):
             print("Z-scoring epochs...")
-            zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
+            zepochs = zscore_epochs(sub_id, processed_data_path, tmin, raw)
             # print shape of zepochs
             print(zepochs.get_data().shape)
 
@@ -407,7 +410,7 @@ def to_source(
             print(os.path.exists(f"{zscored_epochs_save_path}/{zepochs_save_fname}"))
 
             print("Z-scoring epochs...")
-            zepochs = zscore_epochs(sub_id, data_path, tmin, raw)
+            zepochs = zscore_epochs(sub_id, processed_data_path, tmin, raw)
             # print shape of zepochs
             print(zepochs.get_data().shape)
 
