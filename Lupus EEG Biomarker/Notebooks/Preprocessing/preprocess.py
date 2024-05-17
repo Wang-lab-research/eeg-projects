@@ -109,6 +109,9 @@ def to_raw(data_path, sub_id, save_path, eog_flag):
     # read data, set EOG channel, and drop unused channels
     print(f"Subject {sub_id}\nreading raw file...")
 
+    # Resample to 400 Hz
+    raw = raw.resample(400)
+    
     # Assuming `raw`, `sub_id`, and `raw_sfreq` are already defined:
     raw_cropped, was_cropped = remove_trailing_zeros(raw, sub_id, sfreq)
     if was_cropped:

@@ -382,14 +382,19 @@ def compute_sub_avg_con(
     # Initialize dictionary for this subject
     sub_con_dict = {}
 
-    # Separate epochs by stimulus
-    (
-        hand_all_label_ts,
-        back_all_label_ts,
-        hand_all_ratings,
-        back_all_ratings,
-    ) = separate_epochs_by_stim(sub_id, processed_data_path, zscored_epochs_data_path)
-
+    if zscored_epochs_data_path is not None:
+        # Separate epochs by stimulus
+        (
+            hand_all_label_ts,
+            back_all_label_ts,
+            hand_all_ratings,
+            back_all_ratings,
+        ) = separate_epochs_by_stim(sub_id, processed_data_path, zscored_epochs_data_path)
+    else:
+        hand_all_label_ts = []
+        back_all_label_ts = []
+        evoked_data_flag = False
+        
     # Resting state
     label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
 
@@ -423,10 +428,13 @@ def compute_sub_avg_con(
         # In next steps, bilateral subjects will be excluded from contributing S1-i data to the group stack
         
     # Unpack label_ts for each site and stimulus level
-    label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
-    label_ts_all.extend([label_ts_EO, 
-                        #  label_ts_EC,
-                         ])
+    if evoked_data_flag:
+        label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
+        label_ts_all.extend([label_ts_EO, 
+                            #  label_ts_EC,
+                            ])
+    else:
+        label_ts_all = [label_ts_EO]
 
     # Get the frequency bands
     fmins = [Freq_Bands[f][0] for f in Freq_Bands]
