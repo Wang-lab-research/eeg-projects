@@ -376,8 +376,8 @@ def compute_sub_avg_con(
     """
     # Set tmax 
     tmin = 0.0
-    tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
-    tmax_resting = 5*60
+    tmax_epo = 1.25  # exclude the baseline period for connectivity estimation 
+    tmax_resting = 5*60 # 5 minutes resting eyes open
     
     # Initialize dictionary for this subject
     sub_con_dict = {}
@@ -441,6 +441,12 @@ def compute_sub_avg_con(
     fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
     # Use only label_ts from overlap of condition_dict and conditions
+    
+    if not evoked_data_flag: # change conditions_dict to include only resting condition
+        condition_dict = {
+            "Eyes Open": 0,
+        }
+        
     desired_conditions_ids = [v for k, v in condition_dict.items() if k in conditions]
     desired_label_ts = [label_ts_all[i] for i in desired_conditions_ids]
 
@@ -750,7 +756,7 @@ def mann_whitney_test(
     sem_2 = np.zeros((n, n))
 
     # Get indices for S1-i and S1-c
-    if 'Eyes' in condition:
+    if 'Eyes' in condition and bilateral_pain_ids is not None:
         s1_lh_index = roi_acronyms.index("S1-i")
     
         # Check if the subject is in the bilateral pain group
