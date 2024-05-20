@@ -110,7 +110,7 @@ def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path, include_noise=Tru
         return None
 
     print(f"Loading CSV for {sub_id}")
-    
+
     EC_start, EC_stop, EO_start, EO_stop = timestamp_csv["Seconds"][0:4]
 
     # Establish timestamps assuming enough recorded for 5 mins of eyes open noise = 2 mins, EO = 3 mins
@@ -144,9 +144,9 @@ def get_cropped_resting_EEGs(sub_id, raw, csv_path, save_path, include_noise=Tru
         EC_stop = EC_start + 180
 
     print(f"Cropping files for {sub_id}\n")
-    
+
     # Include noise or not
-    if include_noise:    
+    if include_noise:
         # Crop and save the cropped raw data to a raw.fif file
         EC_cropped = crop_by_resting_times(
             raw, EC_start, EC_stop, sub_id, save_path, "eyes_closed"
@@ -253,7 +253,7 @@ def to_raw(data_path, sub_id, save_path, csv_path, include_noise):
         set_montage(raw, montage_fname)
 
     # 64 channel case
-    else:       
+    else:
         # For Compumedics 64 channel cap
         if "VEO" in raw.ch_names or "VEOG" in raw.ch_names:
             # eog_adj = 5
@@ -271,12 +271,10 @@ def to_raw(data_path, sub_id, save_path, csv_path, include_noise):
             raw.drop_channels(non_eeg_chs)
             montage_fname = "../montages/Hydro_Neo_Net_64_xyz_cms_No_FID.sfp"
             set_montage(raw, montage_fname)
-            
+
             # For subjects C24, 055, 056, 047 the wrong montage was used
-            if {'FT7', 'PO5'}.issubset(set(raw.ch_names)):
-                raw.drop_channels(
-                    ["FT7", "FT8", "PO5", "PO6"]
-                )
+            if {"FT7", "PO5"}.issubset(set(raw.ch_names)):
+                raw.drop_channels(["FT7", "FT8", "PO5", "PO6"])
                 montage_fname = "../montages/Hydro_Neo_Net_64_xyz_cms_No_FID_Caps.sfp"
                 set_montage(raw, montage_fname)
         if "EEG66" in raw.ch_names:
@@ -780,9 +778,9 @@ def to_epo(raw, sub_id, data_path, save_path):
     val_list = list(event_dict.values())
 
     # Get tmin, tmax from times_tup
-    times_tup,time_win_path = get_time_window(5)
+    times_tup, time_win_path = get_time_window(5)
     tmin, bmax, tmax = times_tup
-    
+
     # create epochs object differently depending on paradigm
     if 10 in event_dict.values() or 12 in event_dict.values():
         print(f"{sub_id}\nCreating epochs WITH key presses\n")
@@ -804,8 +802,8 @@ def to_epo(raw, sub_id, data_path, save_path):
             raw,
             events_from_annot,
             event_dict,
-            tmin=tmin+0.2,
-            tmax=tmax+0.2,
+            tmin=tmin + 0.2,
+            tmax=tmax + 0.2,
             proj=True,
             preload=True,
             event_repeated="merge",
@@ -1366,7 +1364,7 @@ def to_epo(raw, sub_id, data_path, save_path):
     print("\nlen(pain_ratings_lst):\t", len(pain_ratings_lst))
 
     # Complete the saves
-    stim_epochs.save(save_path / (save_fname+".fif"), verbose=True, overwrite=True)
+    stim_epochs.save(save_path / (save_fname + ".fif"), verbose=True, overwrite=True)
 
     # save drop log
     print("\nSaving drop_log as mat file...")
