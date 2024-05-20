@@ -857,7 +857,7 @@ def compute_centrality_and_test(
     group2_centrality = []
 
     # Get indices for S1-i and S1-c
-    if 'Eyes' in condition:
+    if 'Eyes' in condition and bilateral_pain_ids is not None:
         s1_lh_index = roi_acronyms.index("S1-i")
 
     # For each subject, compute betweenness centrality
@@ -867,7 +867,7 @@ def compute_centrality_and_test(
         symm_2 = make_symmetric(group2_stack[i])
 
         # Compute betweenness centrality
-        if 'Eyes' not in condition or sub_ids1[i] not in bilateral_pain_ids:
+        if 'Eyes' not in condition or bilateral_pain_ids is None or sub_ids1[i] not in bilateral_pain_ids:
             group1_centrality.append(bct.betweenness_wei(symm_1))
         else:
             sub_bc = bct.betweenness_wei(symm_1)
@@ -875,7 +875,7 @@ def compute_centrality_and_test(
             group1_centrality.append(sub_bc)
 
         # Repeat for group 2
-        if 'Eyes' not in condition or sub_ids2[i] not in bilateral_pain_ids:
+        if 'Eyes' not in condition or bilateral_pain_ids is None or sub_ids2[i] not in bilateral_pain_ids:
             group2_centrality.append(bct.betweenness_wei(symm_2))
         else:
             sub_bc = bct.betweenness_wei(symm_2)
@@ -1011,7 +1011,7 @@ def plot_connectivity_circle(
     rh_labels = [label[:-2] + "rh" for label in lh_labels]
 
     # If resting state, change S1-lh and S1-rh to S1-i and S1-c
-    if "Eyes" in condition:
+    if "Eyes" in condition and "S1rh" in rh_labels:
         rh_labels[rh_labels.index("S1rh")] = "S1-c"
    
     node_order = lh_labels[::-1] + rh_labels
