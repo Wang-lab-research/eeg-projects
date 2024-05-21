@@ -2,6 +2,9 @@ import os
 import mne
 from IPython import display
 import pickle
+import h5py
+from glob import glob
+import pandas as pd
 
 
 def clear_display():
@@ -69,3 +72,22 @@ def unpickle_data(path, fname):
     with open(os.path.join(path, fname), "rb") as f:
         deserialized_object = pickle.load(f)
     return deserialized_object
+
+
+# Function for loading hdf5 file from parent data folder given sub id
+def load_file(sub_id, data_path, extension="hdf5"):
+    for folder in os.listdir(data_path):
+        if sub_id in folder:
+            sub_id = folder
+            break
+    if extension == "hdf5":
+        h5_files = glob(os.path.join(data_path, folder, f"*.{extension}"))
+        return h5py.File(h5_files[0], "r")
+    elif extension == "edf":
+        edf_files = glob(os.path.join(data_path, folder, "*.edf")) + glob(
+            os.path.join(data_path, folder, "*.EDF")
+        )
+        return mne.io.read_raw_edf(edf_files[0], preload=True)
+    elif extension == "csv":
+        csv_files = glob(os.path.join(data_path, folder, "*.csv"))
+        return pd.read_csv(csv_files[0])

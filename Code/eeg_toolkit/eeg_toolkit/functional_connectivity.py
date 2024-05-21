@@ -233,15 +233,9 @@ def bp_gen(
         )
 
 
-def compute_aec(method, 
-                label_ts, 
-                sfreq, 
-                fmin, 
-                fmax, 
-                tmin, 
-                tmax, 
-                roi_names,
-                orthogonalize_AEC=True):
+def compute_aec(
+    method, label_ts, sfreq, fmin, fmax, tmin, tmax, roi_names, orthogonalize_AEC=True
+):
     """
     Compute the correlation between regions of interest (ROIs) using different methods.
 
@@ -347,6 +341,7 @@ def compute_sub_avg_con(
     roi_acronyms,
     Freq_Bands,
     sfreq,
+    tmax_epo=None,
     orthogonalize_AEC=True,
     left_pain_ids=None,
     right_pain_ids=None,
@@ -374,26 +369,33 @@ def compute_sub_avg_con(
     Returns:
         dict: A dictionary containing the connectivity sub_con_dict for each condition, method, and frequency band.
     """
-    # Set tmax 
+    # Set tmax
     tmin = 0.0
-    tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
-    tmax_resting = 5*60
-    
+    if tmax_epo is None:
+        tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
+    tmax_resting = 5 * 60  # 5 minutes resting eyes open
+
     # Initialize dictionary for this subject
     sub_con_dict = {}
 
-    # Separate epochs by stimulus
-    (
-        hand_all_label_ts,
-        back_all_label_ts,
-        hand_all_ratings,
-        back_all_ratings,
-    ) = separate_epochs_by_stim(sub_id, processed_data_path, zscored_epochs_data_path)
+    evoked_data_flag = True
+    if zscored_epochs_data_path is not None:
+        # Separate epochs by stimulus
+        (
+            hand_all_label_ts,
+            back_all_label_ts,
+            hand_all_ratings,
+            back_all_ratings,
+        ) = separate_epochs_by_stim(
+            sub_id, processed_data_path, zscored_epochs_data_path
+        )
+    else:
+        hand_all_label_ts = []
+        back_all_label_ts = []
+        evoked_data_flag = False
 
     # Resting state
     label_ts_EO = utils.unpickle_data(EO_resting_data_path, f"{sub_id}_eyes_open.pkl")
-
-    # tmax_resting = len(label_ts_EO[0]) 
 
     # label_ts_EC = utils.unpickle_data(EC_resting_data_path, f"{sub_id}_eyes_closed.pkl")
 
@@ -421,18 +423,30 @@ def compute_sub_avg_con(
         label_ts_EO[s1_rh_index] = avg_S1_EO
         # label_ts_EC[s1_rh_index] = avg_S1_EC
         # In next steps, bilateral subjects will be excluded from contributing S1-i data to the group stack
-        
+
     # Unpack label_ts for each site and stimulus level
-    label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
-    label_ts_all.extend([label_ts_EO, 
-                        #  label_ts_EC,
-                         ])
+    if evoked_data_flag:
+        label_ts_all = [*hand_all_label_ts, *back_all_label_ts]
+        label_ts_all.extend(
+            [
+                label_ts_EO,
+                #  label_ts_EC,
+            ]
+        )
+    else:
+        label_ts_all = [label_ts_EO]
 
     # Get the frequency bands
     fmins = [Freq_Bands[f][0] for f in Freq_Bands]
     fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
     # Use only label_ts from overlap of condition_dict and conditions
+
+    if not evoked_data_flag:  # change conditions_dict to include only resting condition
+        condition_dict = {
+            "Eyes Open": 0,
+        }
+
     desired_conditions_ids = [v for k, v in condition_dict.items() if k in conditions]
     desired_label_ts = [label_ts_all[i] for i in desired_conditions_ids]
 
@@ -440,10 +454,10 @@ def compute_sub_avg_con(
     for label_ts, condition in zip(desired_label_ts, conditions):
         # Set up the first level of the dictionary
         sub_con_dict[condition] = {}
-        
+
         # Set tmax based on condition
         tmax = tmax_epo if condition == "Hand 256 mN" else tmax_resting
-        
+
         for method in con_methods:
             # Set up the second level of the dictionary
             num_epochs = len(label_ts)
@@ -566,7 +580,9 @@ def compute_sub_avg_con(
                 sub_con_dict[condition][method][band_name]["data"] = data
 
                 # Top 3 connections and their strengths
-                top_connections, strength = get_top_connections(data, method, n_top=3)
+                top_connections, strength = get_top_connections(
+                    data, method, roi_acronyms, n_top=3
+                )
                 sub_con_dict[condition][method][band_name]["top 3"] = top_connections
 
     return sub_con_dict
@@ -670,17 +686,46 @@ def compute_group_con(
                 )[:3]
 
                 # Store the top 3 connections and their strengths in the group_dict
-                group_dict[condition][method][band]["top 3"] = {}
-                group_dict[condition][method][band]["top 3"]["connections"] = [
-                    connection for connection in top_3_connections
-                ]
-                group_dict[condition][method][band]["top 3"]["frequency"] = [
+                group_dict[condition][method][band]["top 3 by occurrence"] = {}
+                group_dict[condition][method][band]["top 3 by occurrence"][
+                    "connections"
+                ] = [connection for connection in top_3_connections]
+                group_dict[condition][method][band]["top 3 by occurrence"][
+                    "frequency"
+                ] = [
                     len(connections_dict[connection])
                     for connection in top_3_connections
                 ]
-                group_dict[condition][method][band]["top 3"]["mean strength"] = [
+                group_dict[condition][method][band]["top 3 by occurrence"][
+                    "mean strength"
+                ] = [
                     np.mean(connections_dict[connection]).round(3)
                     for connection in top_3_connections
+                ]
+
+                # Sort the connections by their strength and select the top 3
+                top_3_connections_strength = sorted(
+                    connections_dict,
+                    key=lambda k: np.mean(connections_dict[k]),
+                    reverse=True,
+                )[:3]
+
+                # Store the top 3 connections and their strengths in the group_dict
+                group_dict[condition][method][band]["top 3 by strength"] = {}
+                group_dict[condition][method][band]["top 3 by strength"][
+                    "connections"
+                ] = [connection for connection in top_3_connections_strength]
+                group_dict[condition][method][band]["top 3 by strength"][
+                    "mean strength"
+                ] = [
+                    np.mean(connections_dict[connection]).round(3)
+                    for connection in top_3_connections_strength
+                ]
+                group_dict[condition][method][band]["top 3 by strength"][
+                    "frequency"
+                ] = [
+                    len(connections_dict[connection])
+                    for connection in top_3_connections_strength
                 ]
 
         # Sum the number of epochs in each condition
@@ -707,15 +752,15 @@ def get_method_plot_name(method):
 
 
 def mann_whitney_test(
-    group1_stack, 
-    group2_stack, 
+    group1_stack,
+    group2_stack,
     roi_acronyms,
     sub_ids1=None,
     sub_ids2=None,
     condition=None,
     bilateral_pain_ids=None,
-    round_neg_vals=True, 
-    method=None
+    round_neg_vals=True,
+    method=None,
 ):
     """
     Perform Mann-Whitney U test on group1_stack and group2_stack for each ROI combination.
@@ -742,12 +787,12 @@ def mann_whitney_test(
     sem_2 = np.zeros((n, n))
 
     # Get indices for S1-i and S1-c
-    if 'Eyes' in condition:
+    if "Eyes" in condition and bilateral_pain_ids is not None:
         s1_lh_index = roi_acronyms.index("S1-i")
-    
+
         # Check if the subject is in the bilateral pain group
         ignore_inds = np.where(np.in1d(sub_ids1, bilateral_pain_ids))[0]
-        
+
         group1_stack[ignore_inds, s1_lh_index, :] = np.nan
         group1_stack[ignore_inds, :, s1_lh_index] = np.nan
 
@@ -763,9 +808,9 @@ def mann_whitney_test(
             data2 = group2_stack[:, i, j]
 
             # Ignore NaN values from subjects without S1-i
-            data1 = data1[~np.isnan(data1)]  
+            data1 = data1[~np.isnan(data1)]
             data2 = data2[~np.isnan(data2)]
-            
+
             # Round negative values
             if round_neg_vals:
                 print(data1)
@@ -843,7 +888,7 @@ def compute_centrality_and_test(
     group2_centrality = []
 
     # Get indices for S1-i and S1-c
-    if 'Eyes' in condition:
+    if "Eyes" in condition and bilateral_pain_ids is not None:
         s1_lh_index = roi_acronyms.index("S1-i")
 
     # For each subject, compute betweenness centrality
@@ -853,7 +898,11 @@ def compute_centrality_and_test(
         symm_2 = make_symmetric(group2_stack[i])
 
         # Compute betweenness centrality
-        if 'Eyes' not in condition or sub_ids1[i] not in bilateral_pain_ids:
+        if (
+            "Eyes" not in condition
+            or bilateral_pain_ids is None
+            or sub_ids1[i] not in bilateral_pain_ids
+        ):
             group1_centrality.append(bct.betweenness_wei(symm_1))
         else:
             sub_bc = bct.betweenness_wei(symm_1)
@@ -861,7 +910,11 @@ def compute_centrality_and_test(
             group1_centrality.append(sub_bc)
 
         # Repeat for group 2
-        if 'Eyes' not in condition or sub_ids2[i] not in bilateral_pain_ids:
+        if (
+            "Eyes" not in condition
+            or bilateral_pain_ids is None
+            or sub_ids2[i] not in bilateral_pain_ids
+        ):
             group2_centrality.append(bct.betweenness_wei(symm_2))
         else:
             sub_bc = bct.betweenness_wei(symm_2)
@@ -876,12 +929,11 @@ def compute_centrality_and_test(
         bc_norm2 = bc2 / ((N - 1) * (N - 2))
         group1_centrality[i] = bc_norm1
         group2_centrality[i] = bc_norm2
-        
 
     # Convert centrality lists to arrays
     group1_centrality = np.array(group1_centrality)
     group2_centrality = np.array(group2_centrality)
-    
+
     # Perform Mann-Whitney U test between the nodes of both groups
     p_values = []
     means_1 = []
@@ -893,9 +945,9 @@ def compute_centrality_and_test(
         data2 = group2_centrality[:, j]
 
         # Ignore NaN values from subjects without S1-i
-        data1 = data1[~np.isnan(data1)]  
+        data1 = data1[~np.isnan(data1)]
         data2 = data2[~np.isnan(data2)]
-                
+
         # Test using Mann-Whitney U
         u, p = stats.mannwhitneyu(data1, data2)
         p_values.append(p)
@@ -903,7 +955,7 @@ def compute_centrality_and_test(
         # Calculate means
         means_1.append(np.mean(data1))
         means_2.append(np.mean(data2))
-        
+
         # Calculate SEM
         sem_1.append(stats.sem(data1))
         sem_2.append(stats.sem(data2))
@@ -997,9 +1049,9 @@ def plot_connectivity_circle(
     rh_labels = [label[:-2] + "rh" for label in lh_labels]
 
     # If resting state, change S1-lh and S1-rh to S1-i and S1-c
-    if "Eyes" in condition:
+    if "Eyes" in condition and "S1rh" in rh_labels:
         rh_labels[rh_labels.index("S1rh")] = "S1-c"
-   
+
     node_order = lh_labels[::-1] + rh_labels
 
     # Circular layout
@@ -1043,7 +1095,7 @@ def plot_connectivity_circle(
         )
 
 
-def get_top_connections(data, method, n_top=3):
+def get_top_connections(data, method, roi_acronyms, n_top=3):
     """
     Get top n_top connections based on strength of the given FC method
 
@@ -1074,6 +1126,16 @@ def get_top_connections(data, method, n_top=3):
 
     # Sort the connections by strength and select the top n_top
     top_connections.sort(key=lambda x: x[1], reverse=True)
+
+    # Remove top connections if contain control regions
+    control_regions = ["lOCC-lh", "lOCC-rh", "aud-lh", "aud-rh"]
+    control_region_ids = [roi_acronyms.index(region) for region in control_regions]
+    top_connections = [
+        conn
+        for conn in top_connections
+        if conn[0][0] not in control_region_ids and conn[0][1] not in control_region_ids
+    ]
+    
     top_connections = top_connections[:n_top]
 
     return top_connections, strength
@@ -1214,7 +1276,15 @@ def plot_connectivity_and_stats(
             mean_sem_2 = f"{np.round(means_2[region_pair[0], region_pair[1]],3)} ± {np.round(sem_2[region_pair[0], region_pair[1]],3)}"
 
             table.append([roi_pair, p_val, mean_sem_1, mean_sem_2])
-            table2.append([roi_acronyms[region_pair[0]], roi_acronyms[region_pair[1]], p_val, mean_sem_1, mean_sem_2])
+            table2.append(
+                [
+                    roi_acronyms[region_pair[0]],
+                    roi_acronyms[region_pair[1]],
+                    p_val,
+                    mean_sem_1,
+                    mean_sem_2,
+                ]
+            )
         print(tabulate(table, headers=header, tablefmt="pretty"))
         sig_pairs = table2
     else:
@@ -1222,7 +1292,9 @@ def plot_connectivity_and_stats(
         header = ["Top connections", f"{method} Value"]
         table = []
 
-        top_connections, strength = get_top_connections(means_1, method, n_top=3)
+        top_connections, strength = get_top_connections(
+            means_1, method, roi_acronyms, n_top=3
+        )
 
         for region_pair, strength in top_connections:
             roi_pair = (
