@@ -341,6 +341,7 @@ def compute_sub_avg_con(
     roi_acronyms,
     Freq_Bands,
     sfreq,
+    tmax_epo=None,
     orthogonalize_AEC=True,
     left_pain_ids=None,
     right_pain_ids=None,
@@ -370,7 +371,8 @@ def compute_sub_avg_con(
     """
     # Set tmax
     tmin = 0.0
-    tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
+    if tmax_epo is None:
+        tmax_epo = 1.25  # exclude the baseline period for connectivity estimation
     tmax_resting = 5 * 60  # 5 minutes resting eyes open
 
     # Initialize dictionary for this subject
