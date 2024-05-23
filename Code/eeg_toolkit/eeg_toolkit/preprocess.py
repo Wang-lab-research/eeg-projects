@@ -12,14 +12,6 @@ RESAMPLE_FREQ = 400
 RANDOM_STATE = 42
 
 
-class LowerBackError(Exception):
-    pass
-
-
-class EOGFitError(Exception):
-    pass
-
-
 def get_time_window(peri_stim_time_win=None):
     """
     Get the tmin,tmax,bmax for any custom time window.
@@ -372,7 +364,7 @@ def to_raw(data_path, sub_id, save_path, csv_path, include_noise):
         try:
             eog_indices, eog_scores = ica.find_bads_eog(raw, threshold="auto")
             ica.exclude = eog_indices
-        except EOGFitError:
+        except ValueError:
             ica.exclude = [0, 1]
         # clear_display()
 

@@ -441,12 +441,10 @@ def compute_sub_avg_con(
     fmaxs = [Freq_Bands[f][1] for f in Freq_Bands]
 
     # Use only label_ts from overlap of condition_dict and conditions
-
     if not evoked_data_flag:  # change conditions_dict to include only resting condition
         condition_dict = {
             "Eyes Open": 0,
         }
-
     desired_conditions_ids = [v for k, v in condition_dict.items() if k in conditions]
     desired_label_ts = [label_ts_all[i] for i in desired_conditions_ids]
 
@@ -456,11 +454,14 @@ def compute_sub_avg_con(
         sub_con_dict[condition] = {}
 
         # Set tmax based on condition
-        tmax = tmax_epo if condition == "Hand 256 mN" else tmax_resting
+        tmax = tmax_epo if "Hand" in condition else tmax_resting
 
         for method in con_methods:
             # Set up the second level of the dictionary
-            num_epochs = len(label_ts)
+            if "Eyes" in condition:
+                num_epochs = 1
+            else:
+                num_epochs = len(label_ts)
             if num_epochs == 0:
                 continue
             sub_con_dict[condition][method] = {}
@@ -803,7 +804,7 @@ def mann_whitney_test(
 
     for i in range(n):
         for j in range(n):
-            # Perform Mann-Whitney U test
+            # Perform Mann-Whitney test
             data1 = group1_stack[:, i, j]
             data2 = group2_stack[:, i, j]
 
@@ -839,6 +840,94 @@ def mann_whitney_test(
     return p_values, means_1, sem_1, means_2, sem_2
 
 
+def KS_test(
+    group1_stack,
+    group2_stack,
+    roi_acronyms,
+    group_names=None,
+    sub_ids1=None,
+    sub_ids2=None,
+    condition=None,
+    bilateral_pain_ids=None,
+    round_neg_vals=True,
+    method=None,
+):
+
+    # Initialize arrays for p-values, means, and standard error of the mean
+    n = len(roi_acronyms)
+    p_values = np.zeros((n, n))
+    means_1 = np.zeros((n, n))
+    means_2 = np.zeros((n, n))
+    sem_1 = np.zeros((n, n))
+    sem_2 = np.zeros((n, n))
+
+    # Get indices for S1-i and S1-c
+    if "Eyes" in condition and bilateral_pain_ids is not None:
+        s1_lh_index = roi_acronyms.index("S1-i")
+
+        # Check if the subject is in the bilateral pain group
+        ignore_inds = np.where(np.in1d(sub_ids1, bilateral_pain_ids))[0]
+
+        group1_stack[ignore_inds, s1_lh_index, :] = np.nan
+        group1_stack[ignore_inds, :, s1_lh_index] = np.nan
+
+        # Repeat for group 2
+        ignore_inds = np.where(np.in1d(sub_ids2, bilateral_pain_ids))[0]
+        group2_stack[ignore_inds, s1_lh_index, :] = np.nan
+        group2_stack[ignore_inds, :, s1_lh_index] = np.nan
+
+    for i in range(n):
+        for j in range(n):
+            # Perform KS test
+            data1 = group1_stack[:, i, j]
+            data2 = group2_stack[:, i, j]
+
+            # Ignore NaN values from subjects without S1-i
+            data1 = data1[~np.isnan(data1)]
+            data2 = data2[~np.isnan(data2)]
+
+            # Round negative values
+            if round_neg_vals:
+                print(data1)
+                data1[data1 < 0] = 0
+                data2[data2 < 0] = 0
+
+            # If method is 'dpli', adjust data
+            if method == "dpli":
+                data1_tmp = np.abs(data1 - 0.5)
+                data2_tmp = np.abs(data2 - 0.5)
+
+                d, p = stats.ks_2samp(data1_tmp, data2_tmp)
+                
+                p_values[i, j] = p
+            else:
+                d, p = stats.ks_2samp(data1, data2)
+                p_values[i, j] = p
+
+            # Calculate means
+            means_1[i, j] = np.mean(data1)
+            means_2[i, j] = np.mean(data2)
+
+            # Calculate SEM
+            sem_1[i, j] = stats.sem(data1)
+            sem_2[i, j] = stats.sem(data2)
+            
+            # Plot the distributions for each pair of ROIs  
+            if p < 0.05:
+                plt.figure(figsize=(5,4))  
+                plt.hist(np.sort(data1), bins=len(np.sort(data1)), color='blue', alpha=0.5, 
+                         label=group_names[0] if group_names is not None else 'Group 1')  
+                plt.hist(np.sort(data2),bins=len(np.sort(data2)), color='red', alpha=0.5, 
+                         label=group_names[1] if group_names is not None else 'Group 2')  
+                plt.title('{} <> {}'.format(roi_acronyms[i], roi_acronyms[j]))  
+                plt.ylabel('Subject')
+                plt.xlabel('Connectivity')
+                plt.legend()  
+                plt.show()  
+
+
+    return p_values, means_1, sem_1, means_2, sem_2  
+
 def make_symmetric(matrix):
     """
     A function that takes a matrix and makes it symmetric by copying the lower triangle to the upper triangle.
@@ -863,6 +952,7 @@ def compute_centrality_and_test(
     group2_stack,
     roi_acronyms,
     condition,
+    stat_func=None,
     sub_ids1=None,
     sub_ids2=None,
     bilateral_pain_ids=None,
@@ -934,7 +1024,7 @@ def compute_centrality_and_test(
     group1_centrality = np.array(group1_centrality)
     group2_centrality = np.array(group2_centrality)
 
-    # Perform Mann-Whitney U test between the nodes of both groups
+    # Perform KS test between the nodes of both groups
     p_values = []
     means_1 = []
     means_2 = []
@@ -948,8 +1038,11 @@ def compute_centrality_and_test(
         data1 = data1[~np.isnan(data1)]
         data2 = data2[~np.isnan(data2)]
 
-        # Test using Mann-Whitney U
-        u, p = stats.mannwhitneyu(data1, data2)
+        # Test using stats
+        if stat_func is None:
+            u, p = stats.mannwhitneyu(data1, data2)
+        elif stat_func == "KS-test":
+            d, p = stats.ks_2samp(data1, data2)
         p_values.append(p)
 
         # Calculate means
@@ -1135,7 +1228,7 @@ def get_top_connections(data, method, roi_acronyms, n_top=3):
         for conn in top_connections
         if conn[0][0] not in control_region_ids and conn[0][1] not in control_region_ids
     ]
-    
+
     top_connections = top_connections[:n_top]
 
     return top_connections, strength
@@ -1264,7 +1357,7 @@ def plot_connectivity_and_stats(
     # Print table summary of mean and sem, if not plotting individual data
     if not isindividual:
         # Print the table summary
-        print(f"\nMann-Whitney U Test Between {group_names[0]} and {group_names[1]}:")
+        print(f"\nKS Test Between {group_names[0]} and {group_names[1]}:")
         header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
         table = []
         for region_pair in highlight_ij:
