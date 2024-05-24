@@ -148,7 +148,6 @@ def separate_epochs_by_stim(
 
 def compute_connectivity_epochs(
     label_ts,
-    roi_names,
     method,
     fmin,
     fmax,
@@ -175,7 +174,6 @@ def compute_connectivity_epochs(
 
 def compute_connectivity_resting_state(
     label_ts,
-    roi_names,
     method,
     fmin,
     fmax,
@@ -234,7 +232,7 @@ def bp_gen(
 
 
 def compute_aec(
-    method, label_ts, sfreq, fmin, fmax, tmin, tmax, roi_names, orthogonalize_AEC=True
+    method, label_ts, sfreq, fmin, fmax, tmin, tmax, orthogonalize_AEC=True
 ):
     """
     Compute the correlation between regions of interest (ROIs) using different methods.
@@ -245,7 +243,6 @@ def compute_aec(
     - sfreq (float): The sampling frequency of the timeseries data.
     - fmin (float): The minimum frequency of interest for the correlation computation.
     - fmax (float): The maximum frequency of interest for the correlation computation.
-    - roi_names (list): The names of the ROIs.
 
     Returns:
     - data (array): The computed correlation data reshaped to match the ROI names.
@@ -525,7 +522,6 @@ def compute_sub_avg_con(
                         fmax,
                         tmin=tmin,
                         tmax=tmax,
-                        roi_names=roi_names,
                         orthogonalize_AEC=orthogonalize_AEC,
                     )
                     data = corr.reshape(label_ts.shape[1], label_ts.shape[1])
@@ -542,7 +538,6 @@ def compute_sub_avg_con(
                         fmax,
                         tmin=tmin,
                         tmax=tmax,
-                        roi_names=roi_names,
                         orthogonalize_AEC=orthogonalize_AEC,
                     )
                     print(corr.shape)
@@ -550,7 +545,6 @@ def compute_sub_avg_con(
                 elif "Eyes" not in condition and "aec" not in method:
                     con = compute_connectivity_epochs(
                         label_ts,
-                        roi_names,
                         method,
                         fmin,
                         fmax,
@@ -566,7 +560,6 @@ def compute_sub_avg_con(
                     # Compute connectivity for resting state
                     con = compute_connectivity_resting_state(
                         label_ts,
-                        roi_names,
                         method,
                         fmin,
                         fmax,
@@ -756,6 +749,9 @@ def mann_whitney_test(
     group1_stack,
     group2_stack,
     roi_acronyms,
+    functional_groupings=None,
+    functional_groupings_ids=None,
+    func_grp_method=None,
     sub_ids1=None,
     sub_ids2=None,
     condition=None,
@@ -802,15 +798,43 @@ def mann_whitney_test(
         group2_stack[ignore_inds, s1_lh_index, :] = np.nan
         group2_stack[ignore_inds, :, s1_lh_index] = np.nan
 
+    # Loop through the functional groupings
+    if functional_groupings is not None:
+        n = len(functional_groupings_ids)
+        print(f"Number of functional groupings: {n}")
+
+        group1_and2_stack = []
+        for data in [group1_stack, group2_stack]:
+            # Loop through the functional groupings
+            # Create a new array to hold the reduced data
+            new_data = np.zeros((len(group1_stack), 3, 3))
+
+            # Add result to dictionary
+            for i, (grp_name, grp_ids) in enumerate(functional_groupings_ids.items()):
+                if func_grp_method == "max":
+                    new_data[:, i, :] = np.max(data[:, grp_ids, :], axis=1)
+                elif func_grp_method == "mean":
+                    new_data[:, i, :] = np.nanmean(data[:, grp_ids, :], axis=1)
+                elif func_grp_method == "median":
+                    new_data[:, i, :] = np.nanmedian(data[:, grp_ids, :], axis=1)
+
+            print(f"Reduced data shape: {new_data.shape}")
+            group1_and2_stack.append(new_data)
+
+        # Assign functionally grouped data to group1_stack and group2_stack
+        group1_stack, group2_stack = group1_and2_stack
+
     for i in range(n):
         for j in range(n):
             # Perform Mann-Whitney test
             data1 = group1_stack[:, i, j]
             data2 = group2_stack[:, i, j]
 
-            # Ignore NaN values from subjects without S1-i
+            # Remove nans
             data1 = data1[~np.isnan(data1)]
             data2 = data2[~np.isnan(data2)]
+            print(f"Data1 shape: {data1.shape}")
+            print(f"Data2 shape: {data2.shape}")
 
             # Round negative values
             if round_neg_vals:
@@ -844,6 +868,9 @@ def KS_test(
     group1_stack,
     group2_stack,
     roi_acronyms,
+    functional_groupings=None,
+    functional_groupings_ids=None,
+    func_grp_method=None,
     group_names=None,
     sub_ids1=None,
     sub_ids2=None,
@@ -876,6 +903,32 @@ def KS_test(
         group2_stack[ignore_inds, s1_lh_index, :] = np.nan
         group2_stack[ignore_inds, :, s1_lh_index] = np.nan
 
+    # Loop through the functional groupings
+    if functional_groupings is not None:
+        n = len(functional_groupings_ids)
+        print(f"Number of functional groupings: {n}")
+
+        group1_and2_stack = []
+        for data in [group1_stack, group2_stack]:
+            # Loop through the functional groupings
+            # Create a new array to hold the reduced data
+            new_data = np.zeros((len(group1_stack), 3, 3))
+
+            # Add result to dictionary
+            for i, (grp_name, grp_ids) in enumerate(functional_groupings_ids.items()):
+                if func_grp_method == "max":
+                    new_data[:, i, :] = np.max(data[:, grp_ids, :], axis=1)
+                elif func_grp_method == "mean":
+                    new_data[:, i, :] = np.nanmean(data[:, grp_ids, :], axis=1)
+                elif func_grp_method == "median":
+                    new_data[:, i, :] = np.nanmedian(data[:, grp_ids, :], axis=1)
+
+            print(f"Reduced data shape: {new_data.shape}")
+            group1_and2_stack.append(new_data)
+
+        # Assign functionally grouped data to group1_stack and group2_stack
+        group1_stack, group2_stack = group1_and2_stack
+
     for i in range(n):
         for j in range(n):
             # Perform KS test
@@ -885,6 +938,8 @@ def KS_test(
             # Ignore NaN values from subjects without S1-i
             data1 = data1[~np.isnan(data1)]
             data2 = data2[~np.isnan(data2)]
+            print(f"Data1 shape: {data1.shape}")
+            print(f"Data2 shape: {data2.shape}")
 
             # Round negative values
             if round_neg_vals:
@@ -898,8 +953,8 @@ def KS_test(
                 data2_tmp = np.abs(data2 - 0.5)
 
                 d, p = stats.ks_2samp(data1_tmp, data2_tmp)
-                
                 p_values[i, j] = p
+
             else:
                 d, p = stats.ks_2samp(data1, data2)
                 p_values[i, j] = p
@@ -911,22 +966,32 @@ def KS_test(
             # Calculate SEM
             sem_1[i, j] = stats.sem(data1)
             sem_2[i, j] = stats.sem(data2)
-            
-            # Plot the distributions for each pair of ROIs  
+
+            # Plot the distributions for each pair of ROIs
             if p < 0.05:
-                plt.figure(figsize=(5,4))  
-                plt.hist(np.sort(data1), bins=len(np.sort(data1)), color='blue', alpha=0.5, 
-                         label=group_names[0] if group_names is not None else 'Group 1')  
-                plt.hist(np.sort(data2),bins=len(np.sort(data2)), color='red', alpha=0.5, 
-                         label=group_names[1] if group_names is not None else 'Group 2')  
-                plt.title('{} <> {}'.format(roi_acronyms[i], roi_acronyms[j]))  
-                plt.ylabel('Subject')
-                plt.xlabel('Connectivity')
-                plt.legend()  
-                plt.show()  
+                plt.figure(figsize=(5, 4))
+                plt.hist(
+                    np.sort(data1),
+                    bins=len(np.sort(data1)),
+                    color="blue",
+                    alpha=0.5,
+                    label=group_names[0] if group_names is not None else "Group 1",
+                )
+                plt.hist(
+                    np.sort(data2),
+                    bins=len(np.sort(data2)),
+                    color="red",
+                    alpha=0.5,
+                    label=group_names[1] if group_names is not None else "Group 2",
+                )
+                plt.title("{} <> {}".format(roi_acronyms[i], roi_acronyms[j]))
+                plt.ylabel("Subject")
+                plt.xlabel("Connectivity")
+                plt.legend()
+                plt.show()
 
+    return p_values, means_1, sem_1, means_2, sem_2
 
-    return p_values, means_1, sem_1, means_2, sem_2  
 
 def make_symmetric(matrix):
     """
@@ -952,6 +1017,9 @@ def compute_centrality_and_test(
     group2_stack,
     roi_acronyms,
     condition,
+    functional_groupings=None,
+    functional_groupings_ids=None,
+    func_grp_method=None,
     stat_func=None,
     sub_ids1=None,
     sub_ids2=None,
@@ -978,7 +1046,11 @@ def compute_centrality_and_test(
     group2_centrality = []
 
     # Get indices for S1-i and S1-c
-    if "Eyes" in condition and bilateral_pain_ids is not None:
+    if (
+        "Eyes" in condition
+        and bilateral_pain_ids is not None
+        and functional_groupings is None
+    ):
         s1_lh_index = roi_acronyms.index("S1-i")
 
     # For each subject, compute betweenness centrality
@@ -992,6 +1064,7 @@ def compute_centrality_and_test(
             "Eyes" not in condition
             or bilateral_pain_ids is None
             or sub_ids1[i] not in bilateral_pain_ids
+            or functional_groupings is not None # No need to deal with NaNs if regions combined into groups
         ):
             group1_centrality.append(bct.betweenness_wei(symm_1))
         else:
@@ -1004,6 +1077,7 @@ def compute_centrality_and_test(
             "Eyes" not in condition
             or bilateral_pain_ids is None
             or sub_ids2[i] not in bilateral_pain_ids
+            or functional_groupings is not None
         ):
             group2_centrality.append(bct.betweenness_wei(symm_2))
         else:
@@ -1012,7 +1086,7 @@ def compute_centrality_and_test(
             group2_centrality.append(sub_bc)
 
         # Normalize betweenness centrality
-        N = len(roi_acronyms)
+        N = len(roi_acronyms) if functional_groupings is None else len(functional_groupings)
         bc1 = group1_centrality[i]
         bc2 = group2_centrality[i]
         bc_norm1 = bc1 / ((N - 1) * (N - 2))
@@ -1030,13 +1104,14 @@ def compute_centrality_and_test(
     means_2 = []
     sem_1 = []
     sem_2 = []
-    for j in range(len(roi_acronyms)):
+    for j in range(N):
         data1 = group1_centrality[:, j]
         data2 = group2_centrality[:, j]
 
         # Ignore NaN values from subjects without S1-i
         data1 = data1[~np.isnan(data1)]
         data2 = data2[~np.isnan(data2)]
+        print(f"In KS test, Data1.shape: {data1.shape}, Data2.shape: {data2.shape}")
 
         # Test using stats
         if stat_func is None:
@@ -1057,10 +1132,10 @@ def compute_centrality_and_test(
     print("\nBetweenness Centrality by Region:")
     header = ["ROI", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
     table = []
-    for region in range(len(roi_acronyms)):
+    for region in range(N):
         if p_values[region] >= 0.05:
             continue
-        roi_name = roi_acronyms[region]
+        roi_name = roi_acronyms[region] if functional_groupings is None else list(functional_groupings.keys())[region]
         p_val = f"{np.round(p_values[region],4)}"
         mean_sem_1 = f"{np.round(means_1[region],3)} ± {np.round(sem_1[region],3)}"
         mean_sem_2 = f"{np.round(means_2[region],3)} ± {np.round(sem_2[region],3)}"
@@ -1086,6 +1161,9 @@ def plot_connectivity_circle(
     roi_acronyms,
     condition,
     save_path,
+    functional_groupings=None,
+    functional_group_ids=None,
+    func_grp_method=None,
     vmin=None,
     vmax=None,
     fig=None,
@@ -1119,11 +1197,15 @@ def plot_connectivity_circle(
         )[0]
         for roi in roi_names
     ]
+    
     # read colors
     node_colors = [label.color for label in labels]
-
+    # read functional groupings
+    if functional_groupings is not None:
+        node_colors = node_colors[: len(functional_groupings)]
+    
     # We reorder the labels based on their location in the left hemi
-    label_names = roi_acronyms
+    label_names = roi_acronyms if functional_groupings is None else list(functional_groupings.keys())
     lh_labels = [
         label for label in label_names if label.endswith("lh") or label.endswith("-i")
     ]
@@ -1245,6 +1327,9 @@ def plot_connectivity_and_stats(
     titles,
     save_names,
     save_path,
+    functional_groupings=None,
+    functional_groupings_ids=None,
+    func_grp_method=None,
     group_dict=None,
     means_2=None,
     sem_1=None,
@@ -1308,6 +1393,11 @@ def plot_connectivity_and_stats(
     if min_fc_val is None:
         min_fc_val = -1
 
+    # Adjust for functional groupings
+    if functional_groupings is not None:
+        roi_names = list(functional_groupings.keys())
+        roi_acronyms = list(functional_groupings.keys())
+        
     # Round negative values in the means
     if round_neg_vals:
         for data in [means_1, means_2] if not isindividual else [means_1]:
@@ -1358,7 +1448,9 @@ def plot_connectivity_and_stats(
     if not isindividual:
         # Print the table summary
         print(f"\nKS Test Between {group_names[0]} and {group_names[1]}:")
-        header = ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
+        header = (["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"] if functional_groupings is None \
+            else ["Functional Group Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
+            )
         table = []
         for region_pair in highlight_ij:
             roi_pair = (
@@ -1446,9 +1538,14 @@ def plot_connectivity_and_stats(
                 vmin, vmax = (0.0, 1.0)
 
         # Plot circle for FC values, and connectivity matrix just for p-values
-        if data_idx == pval_pos and not isindividual:
+        if not isindividual:
             fig = plt.figure()
-            plt.imshow(data, vmin=vmin, vmax=vmax, cmap="hot")
+            plt.imshow(
+                data, 
+                vmin=vmin, 
+                vmax=vmax, 
+                cmap="hot" if data_idx == pval_pos else 'viridis'
+                )
 
             plt.ylabel("Regions", labelpad=20)
             plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
@@ -1459,14 +1556,7 @@ def plot_connectivity_and_stats(
             )
 
             if set_title:
-                if data_idx != pval_pos:  # group 1 or group 2
-                    plt.title(
-                        f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[data_idx-1]} trials)"
-                    )
-                else:  # p-values
-                    plt.title(
-                        f"{titles[data_idx]} | {condition} | {band} | ({method} method, {nepochs[0]} vs. {nepochs[1]} trials)"
-                    )
+                plt.title(f"{titles[data_idx]} | {condition} | {band}")
 
         else:
             # First change vmin and vmax for individual plots
@@ -1506,6 +1596,8 @@ def plot_connectivity_and_stats(
                 save_fig=True,
             )
 
+            # Also plot matrix for FC values, besides just the circle
+            
         # Overlay values
         if data_idx == pval_pos:  # if plotting matrix
             for i in range(len(roi_names)):
