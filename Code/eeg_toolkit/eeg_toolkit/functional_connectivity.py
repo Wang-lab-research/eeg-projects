@@ -30,7 +30,7 @@ def get_info_by_stim(stim_label, stim_labels, pain_ratings):
         pain_ratings (list): A list of pain ratings.
 
     Returns:
-        tuple: A tuple containing two lists. The first list contains the indices of the stimulus labels that match the given stim_label. The second list contains the corresponding pain ratings for those stimulus labels.
+        tuple: A tuple containing two lists. The first list contains the functional_groupings_ids of the stimulus labels that match the given stim_label. The second list contains the corresponding pain ratings for those stimulus labels.
     """
     site_stim_labels = [i for i, el in enumerate(stim_labels) if el == stim_label]
     site_stim_ratings = [
@@ -92,7 +92,7 @@ def separate_epochs_by_stim(
         pain_ratings = pain_ratings_raw
 
     ##############################################################################################
-    # Identify trial indices
+    # Identify trial functional_groupings_ids
 
     hand_NS_labels, hand_NS_ratings = get_info_by_stim(5, stim_labels, pain_ratings)
     hand_HS_labels, hand_HS_ratings = get_info_by_stim(3, stim_labels, pain_ratings)
@@ -745,6 +745,47 @@ def get_method_plot_name(method):
     return method_dict.get(method, method.upper())
 
 
+def reduce_connectivity_matrix(data, functional_groupings_ids, method='median'):
+    """
+    Reduces a 19x12x12 connectivity matrix to 19xN*N using specified aggregation method,
+    where N is the length of the functional groupings.
+
+    Parameters:
+    data (numpy.ndarray): The original 19x12x12 connectivity matrix.
+    functional_groupings_ids (list of list of int): A list of lists, each containing functional_groupings_ids to group the 12x12 regions.
+    method (str): The method to use for aggregation ('mean', 'median', 'max').
+
+    Returns:
+    numpy.ndarray: The reduced 19xN*N connectivity matrix.
+    """
+    num_subjects = data.shape[0]
+    num_groups = len(functional_groupings_ids)
+    reduced_data = np.zeros((num_subjects, num_groups, num_groups))
+
+    ids = [id for id in functional_groupings_ids.values()]
+    
+    for i in range(num_subjects):
+        for j in range(num_groups):
+            for k in range(num_groups):
+                # Get the functional_groupings_ids for the current group
+                group_j = ids[j]
+                group_k = ids[k]
+                
+                # Extract the submatrix for the current groups using np.ix_
+                submatrix = data[i][np.ix_(group_j, group_k)]
+                
+                # Calculate the aggregation based on the specified method
+                if method == 'mean':
+                    reduced_data[i, j, k] = np.nanmean(submatrix)
+                elif method == 'max':
+                    reduced_data[i, j, k] = np.nanmax(submatrix)
+                elif method == 'median':
+                    reduced_data[i, j, k] = np.nanmedian(submatrix)
+                else:
+                    raise ValueError("Method must be 'mean', 'median', or 'max'")
+
+    return reduced_data
+
 def mann_whitney_test(
     group1_stack,
     group2_stack,
@@ -776,14 +817,14 @@ def mann_whitney_test(
     """
 
     # Initialize arrays for p-values, means, and standard error of the mean
-    n = len(roi_acronyms)
+    n = len(roi_acronyms) if functional_groupings is None else len(functional_groupings)
     p_values = np.zeros((n, n))
     means_1 = np.zeros((n, n))
     means_2 = np.zeros((n, n))
     sem_1 = np.zeros((n, n))
     sem_2 = np.zeros((n, n))
 
-    # Get indices for S1-i and S1-c
+    # Get functional_groupings_ids for S1-i and S1-c
     if "Eyes" in condition and bilateral_pain_ids is not None:
         s1_lh_index = roi_acronyms.index("S1-i")
 
@@ -800,26 +841,14 @@ def mann_whitney_test(
 
     # Loop through the functional groupings
     if functional_groupings is not None:
-        n = len(functional_groupings_ids)
-        print(f"Number of functional groupings: {n}")
-
         group1_and2_stack = []
         for data in [group1_stack, group2_stack]:
             # Loop through the functional groupings
             # Create a new array to hold the reduced data
-            new_data = np.zeros((len(group1_stack), 3, 3))
 
-            # Add result to dictionary
-            for i, (grp_name, grp_ids) in enumerate(functional_groupings_ids.items()):
-                if func_grp_method == "max":
-                    new_data[:, i, :] = np.max(data[:, grp_ids, :], axis=1)
-                elif func_grp_method == "mean":
-                    new_data[:, i, :] = np.nanmean(data[:, grp_ids, :], axis=1)
-                elif func_grp_method == "median":
-                    new_data[:, i, :] = np.nanmedian(data[:, grp_ids, :], axis=1)
-
-            print(f"Reduced data shape: {new_data.shape}")
-            group1_and2_stack.append(new_data)
+            reduced_matrix = reduce_connectivity_matrix(data, functional_groupings_ids, func_grp_method)
+            
+            group1_and2_stack.append(reduced_matrix)
 
         # Assign functionally grouped data to group1_stack and group2_stack
         group1_stack, group2_stack = group1_and2_stack
@@ -833,8 +862,6 @@ def mann_whitney_test(
             # Remove nans
             data1 = data1[~np.isnan(data1)]
             data2 = data2[~np.isnan(data2)]
-            print(f"Data1 shape: {data1.shape}")
-            print(f"Data2 shape: {data2.shape}")
 
             # Round negative values
             if round_neg_vals:
@@ -888,7 +915,7 @@ def KS_test(
     sem_1 = np.zeros((n, n))
     sem_2 = np.zeros((n, n))
 
-    # Get indices for S1-i and S1-c
+    # Get functional_groupings_ids for S1-i and S1-c
     if "Eyes" in condition and bilateral_pain_ids is not None:
         s1_lh_index = roi_acronyms.index("S1-i")
 
@@ -912,19 +939,10 @@ def KS_test(
         for data in [group1_stack, group2_stack]:
             # Loop through the functional groupings
             # Create a new array to hold the reduced data
-            new_data = np.zeros((len(group1_stack), 3, 3))
 
-            # Add result to dictionary
-            for i, (grp_name, grp_ids) in enumerate(functional_groupings_ids.items()):
-                if func_grp_method == "max":
-                    new_data[:, i, :] = np.max(data[:, grp_ids, :], axis=1)
-                elif func_grp_method == "mean":
-                    new_data[:, i, :] = np.nanmean(data[:, grp_ids, :], axis=1)
-                elif func_grp_method == "median":
-                    new_data[:, i, :] = np.nanmedian(data[:, grp_ids, :], axis=1)
-
-            print(f"Reduced data shape: {new_data.shape}")
-            group1_and2_stack.append(new_data)
+            reduced_matrix = reduce_connectivity_matrix(data, functional_groupings_ids, func_grp_method)
+            
+            group1_and2_stack.append(reduced_matrix)
 
         # Assign functionally grouped data to group1_stack and group2_stack
         group1_stack, group2_stack = group1_and2_stack
@@ -938,8 +956,6 @@ def KS_test(
             # Ignore NaN values from subjects without S1-i
             data1 = data1[~np.isnan(data1)]
             data2 = data2[~np.isnan(data2)]
-            print(f"Data1 shape: {data1.shape}")
-            print(f"Data2 shape: {data2.shape}")
 
             # Round negative values
             if round_neg_vals:
@@ -989,6 +1005,7 @@ def KS_test(
                 plt.xlabel("Connectivity")
                 plt.legend()
                 plt.show()
+                plt.close()
 
     return p_values, means_1, sem_1, means_2, sem_2
 
@@ -1045,7 +1062,7 @@ def compute_centrality_and_test(
     group1_centrality = []
     group2_centrality = []
 
-    # Get indices for S1-i and S1-c
+    # Get functional_groupings_ids for S1-i and S1-c
     if (
         "Eyes" in condition
         and bilateral_pain_ids is not None
@@ -1098,6 +1115,37 @@ def compute_centrality_and_test(
     group1_centrality = np.array(group1_centrality)
     group2_centrality = np.array(group2_centrality)
 
+    # If functional_groupings 
+    if functional_groupings is not None:
+        num_subjects = len(group1_centrality)
+        N = len(functional_groupings)
+        reduced_data = np.zeros((num_subjects, N))
+        indices = [ids for ids in functional_groupings_ids.values()]
+        group1_and_group2_centrality = []
+        for data in [group1_centrality, group2_centrality]:
+            for i in range(num_subjects):
+                for j in range(N):
+                    # Get the indices for the current group
+                    group_j = indices[j]
+                    
+                    # Extract the submatrix for the current group
+                    submatrix = data[i, group_j]
+                    
+                    # Calculate the aggregation based on the specified method
+                    if func_grp_method == 'mean':
+                        reduced_data[i, j] = np.nanmean(submatrix)
+                    elif func_grp_method == 'max':
+                        reduced_data[i, j] = np.nanmax(submatrix)
+                    elif func_grp_method == 'median':
+                        reduced_data[i, j] = np.nanmedian(submatrix)
+                    else:
+                        raise ValueError("Method must be 'mean', 'median', or 'max'")
+
+            group1_and_group2_centrality.append(reduced_data)
+
+        group1_centrality = group1_and_group2_centrality[0]
+        group2_centrality = group1_and_group2_centrality[1]
+
     # Perform KS test between the nodes of both groups
     p_values = []
     means_1 = []
@@ -1111,7 +1159,6 @@ def compute_centrality_and_test(
         # Ignore NaN values from subjects without S1-i
         data1 = data1[~np.isnan(data1)]
         data2 = data2[~np.isnan(data2)]
-        print(f"In KS test, Data1.shape: {data1.shape}, Data2.shape: {data2.shape}")
 
         # Test using stats
         if stat_func is None:
@@ -1254,7 +1301,7 @@ def plot_connectivity_circle(
         title=title_prefix,
         fig=fig,
         subplot=subplot,
-        show=False,
+        show=True,
     )
 
     # Save figure
@@ -1268,6 +1315,9 @@ def plot_connectivity_circle(
             bbox_inches="tight",
             dpi=300,
         )
+
+    plt.show()
+    plt.close()
 
 
 def get_top_connections(data, method, roi_acronyms, n_top=3):
@@ -1304,7 +1354,7 @@ def get_top_connections(data, method, roi_acronyms, n_top=3):
 
     # Remove top connections if contain control regions
     control_regions = ["lOCC-lh", "lOCC-rh", "aud-lh", "aud-rh"]
-    control_region_ids = [roi_acronyms.index(region) for region in control_regions]
+    control_region_ids = [roi_acronyms.index(region) for region in control_regions if region in roi_acronyms]
     top_connections = [
         conn
         for conn in top_connections
@@ -1408,7 +1458,7 @@ def plot_connectivity_and_stats(
 
     # Parameters for p-values plot
     if not isindividual:
-        # Get highlight indices
+        # Get highlight functional_groupings_ids
         highlight_ij = []
         for i in range(len(roi_names)):
             for j in range(len(roi_names)):
@@ -1447,7 +1497,7 @@ def plot_connectivity_and_stats(
     # Print table summary of mean and sem, if not plotting individual data
     if not isindividual:
         # Print the table summary
-        print(f"\nKS Test Between {group_names[0]} and {group_names[1]}:")
+        print(f"\nStatistical Test Between {group_names[0]} and {group_names[1]}:")
         header = (["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"] if functional_groupings is None \
             else ["Functional Group Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
             )
@@ -1557,6 +1607,8 @@ def plot_connectivity_and_stats(
 
             if set_title:
                 plt.title(f"{titles[data_idx]} | {condition} | {band}")
+            plt.colorbar()
+    
 
         else:
             # First change vmin and vmax for individual plots
