@@ -11,6 +11,8 @@ import scipy.stats as stats
 from mne.datasets import fetch_fsaverage
 from collections import defaultdict
 import bct
+import seaborn as sns
+sns.set_theme(style="white")
 
 fs_dir = fetch_fsaverage(verbose=True)
 subject = "fsaverage"
@@ -579,7 +581,9 @@ def compute_sub_avg_con(
                 # Top 3 connections and their strengths
                 if functional_groupings is not None:
                     roi_acronyms = functional_groupings
-                    reduced_data = reduce_connectivity_matrix(data, functional_groupings_ids, method=func_grp_method)
+                    reduced_data = reduce_connectivity_matrix(
+                        data, functional_groupings_ids, method=func_grp_method
+                    )
                 top_connections, strength = get_top_connections(
                     reduced_data, method, roi_acronyms, n_top=3
                 )
@@ -751,7 +755,7 @@ def get_method_plot_name(method):
     return method_dict.get(method, method.upper())
 
 
-def reduce_connectivity_matrix(data, functional_groupings_ids, method='max'):
+def reduce_connectivity_matrix(data, functional_groupings_ids, method="max"):
     """
     Reduces a 19x12x12 connectivity matrix to 19xN*N using specified aggregation method,
     where N is the length of the functional groupings.
@@ -766,36 +770,44 @@ def reduce_connectivity_matrix(data, functional_groupings_ids, method='max'):
     """
     num_subjects = data.shape[0] if data.ndim == 3 else 1
     num_groups = len(functional_groupings_ids)
-    reduced_data = np.zeros((num_subjects, num_groups, num_groups)) if data.ndim == 3 else np.zeros((num_groups, num_groups))
+    reduced_data = (
+        np.zeros((num_subjects, num_groups, num_groups))
+        if data.ndim == 3
+        else np.zeros((num_groups, num_groups))
+    )
 
     ids = [id for id in functional_groupings_ids.values()]
-    
+
     for i in range(num_subjects):
         for j in range(num_groups):
             for k in range(num_groups):
                 # Get the functional_groupings_ids for the current group
                 group_j = ids[j]
                 group_k = ids[k]
-                
+
                 # Extract the submatrix for the current groups using np.ix_
-                submatrix = data[i][np.ix_(group_j, group_k)] if data.ndim == 3 else data[np.ix_(group_j, group_k)]
-                
+                submatrix = (
+                    data[i][np.ix_(group_j, group_k)]
+                    if data.ndim == 3
+                    else data[np.ix_(group_j, group_k)]
+                )
+
                 # Calculate the aggregation based on the specified method
                 if data.ndim == 3:
-                    if method == 'mean':
+                    if method == "mean":
                         reduced_data[i, j, k] = np.nanmean(submatrix)
-                    elif method == 'max':
+                    elif method == "max":
                         reduced_data[i, j, k] = np.nanmax(submatrix)
-                    elif method == 'median':
+                    elif method == "median":
                         reduced_data[i, j, k] = np.nanmedian(submatrix)
                     else:
                         raise ValueError("Method must be 'mean', 'median', or 'max'")
                 elif data.ndim == 2:
-                    if method == 'mean':
+                    if method == "mean":
                         reduced_data[j, k] = np.nanmean(submatrix)
-                    elif method == 'max':
+                    elif method == "max":
                         reduced_data[j, k] = np.nanmax(submatrix)
-                    elif method == 'median':
+                    elif method == "median":
                         reduced_data[j, k] = np.nanmedian(submatrix)
                     else:
                         raise ValueError("Method must be 'mean', 'median', or 'max'")
@@ -803,6 +815,7 @@ def reduce_connectivity_matrix(data, functional_groupings_ids, method='max'):
                     raise ValueError("Data must be 2D or 3D")
 
     return reduced_data
+
 
 def mann_whitney_test(
     group1_stack,
@@ -864,8 +877,10 @@ def mann_whitney_test(
             # Loop through the functional groupings
             # Create a new array to hold the reduced data
 
-            reduced_matrix = reduce_connectivity_matrix(data, functional_groupings_ids, func_grp_method)
-            
+            reduced_matrix = reduce_connectivity_matrix(
+                data, functional_groupings_ids, func_grp_method
+            )
+
             group1_and2_stack.append(reduced_matrix)
 
         # Assign functionally grouped data to group1_stack and group2_stack
@@ -901,7 +916,7 @@ def mann_whitney_test(
             # Calculate means
             means_1[i, j] = np.mean(data1)
             means_2[i, j] = np.mean(data2)
-
+            
             # Calculate SEM
             sem_1[i, j] = stats.sem(data1)
             sem_2[i, j] = stats.sem(data2)
@@ -958,8 +973,10 @@ def KS_test(
             # Loop through the functional groupings
             # Create a new array to hold the reduced data
 
-            reduced_matrix = reduce_connectivity_matrix(data, functional_groupings_ids, func_grp_method)
-            
+            reduced_matrix = reduce_connectivity_matrix(
+                data, functional_groupings_ids, func_grp_method
+            )
+
             group1_and2_stack.append(reduced_matrix)
 
         # Assign functionally grouped data to group1_stack and group2_stack
@@ -996,7 +1013,7 @@ def KS_test(
             # Calculate means
             means_1[i, j] = np.mean(data1)
             means_2[i, j] = np.mean(data2)
-
+                        
             # Calculate SEM
             sem_1[i, j] = stats.sem(data1)
             sem_2[i, j] = stats.sem(data2)
@@ -1052,6 +1069,8 @@ def compute_centrality_and_test(
     group2_stack,
     roi_acronyms,
     condition,
+    group_names=None,
+    band_name=None,
     functional_groupings=None,
     functional_groupings_ids=None,
     func_grp_method=None,
@@ -1098,7 +1117,8 @@ def compute_centrality_and_test(
             "Eyes" not in condition
             or bilateral_pain_ids is None
             or sub_ids1[i] not in bilateral_pain_ids
-            or functional_groupings is not None # No need to deal with NaNs if regions combined into groups
+            or functional_groupings
+            is not None  # No need to deal with NaNs if regions combined into groups
         ):
             group1_centrality.append(bct.betweenness_wei(symm))
         else:
@@ -1107,11 +1127,14 @@ def compute_centrality_and_test(
             group1_centrality.append(sub_bc)
 
         # Normalize betweenness centrality
-        N = len(roi_acronyms) if functional_groupings is None else len(functional_groupings)
+        N = (
+            len(roi_acronyms)
+            if functional_groupings is None
+            else len(functional_groupings)
+        )
         bc = group1_centrality[i]
         bc_norm = bc / ((N - 1) * (N - 2))
         group1_centrality[i] = bc_norm
-
 
     # For each subject, compute betweenness centrality
     for i in range(len(group2_stack)):
@@ -1123,7 +1146,8 @@ def compute_centrality_and_test(
             "Eyes" not in condition
             or bilateral_pain_ids is None
             or sub_ids1[i] not in bilateral_pain_ids
-            or functional_groupings is not None # No need to deal with NaNs if regions combined into groups
+            or functional_groupings
+            is not None  # No need to deal with NaNs if regions combined into groups
         ):
             group2_centrality.append(bct.betweenness_wei(symm))
         else:
@@ -1132,16 +1156,20 @@ def compute_centrality_and_test(
             group2_centrality.append(sub_bc)
 
         # Normalize betweenness centrality
-        N = len(roi_acronyms) if functional_groupings is None else len(functional_groupings)
+        N = (
+            len(roi_acronyms)
+            if functional_groupings is None
+            else len(functional_groupings)
+        )
         bc = group2_centrality[i]
         bc_norm = bc / ((N - 1) * (N - 2))
         group2_centrality[i] = bc_norm
-        
+
     # Convert centrality lists to arrays
     group1_centrality = np.array(group1_centrality)
     group2_centrality = np.array(group2_centrality)
 
-    # If functional_groupings 
+    # If functional_groupings
     if functional_groupings is not None:
         num_subjects = len(group1_centrality)
         N = len(functional_groupings)
@@ -1153,16 +1181,16 @@ def compute_centrality_and_test(
                 for j in range(N):
                     # Get the indices for the current group
                     group_j = indices[j]
-                    
+
                     # Extract the submatrix for the current group
                     submatrix = data[i, group_j]
-                    
+
                     # Calculate the aggregation based on the specified method
-                    if func_grp_method == 'mean':
+                    if func_grp_method == "mean":
                         reduced_data[i, j] = np.nanmean(submatrix)
-                    elif func_grp_method == 'max':
+                    elif func_grp_method == "max":
                         reduced_data[i, j] = np.nanmax(submatrix)
-                    elif func_grp_method == 'median':
+                    elif func_grp_method == "median":
                         reduced_data[i, j] = np.nanmedian(submatrix)
                     else:
                         raise ValueError("Method must be 'mean', 'median', or 'max'")
@@ -1172,10 +1200,12 @@ def compute_centrality_and_test(
         group1_centrality = group1_and_group2_centrality[0]
         group2_centrality = group1_and_group2_centrality[1]
 
-    # Perform KS test between the nodes of both groups
+    # Perform statistical test between the nodes of both groups
     p_values = []
     means_1 = []
     means_2 = []
+    medians_1 = []
+    medians_2 = []
     sem_1 = []
     sem_2 = []
     for j in range(N):
@@ -1197,6 +1227,10 @@ def compute_centrality_and_test(
         means_1.append(np.mean(data1))
         means_2.append(np.mean(data2))
 
+        # Calculate medians
+        medians_1.append(np.median(data1))
+        medians_2.append(np.median(data2))
+                
         # Calculate SEM
         sem_1.append(stats.sem(data1))
         sem_2.append(stats.sem(data2))
@@ -1208,13 +1242,59 @@ def compute_centrality_and_test(
     for region in range(N):
         if p_values[region] >= 0.05:
             continue
-        roi_name = roi_acronyms[region] if functional_groupings is None else list(functional_groupings.keys())[region]
+        roi_name = (
+            roi_acronyms[region]
+            if functional_groupings is None
+            else list(functional_groupings.keys())[region]
+        )
         p_val = f"{np.round(p_values[region],4)}"
         mean_sem_1 = f"{np.round(means_1[region],3)} ± {np.round(sem_1[region],3)}"
         mean_sem_2 = f"{np.round(means_2[region],3)} ± {np.round(sem_2[region],3)}"
         table.append([roi_name, p_val, mean_sem_1, mean_sem_2])
     print(tabulate(table, headers=header, tablefmt="pretty"))
 
+    # Apply Seaborn style
+    sns.set(style="whitegrid")
+
+    # Plot betweenness centrality on polar plot
+    r_1 = np.linspace(0, 2*np.pi, len(medians_1), endpoint=False)
+    r_2 = np.linspace(0, 2*np.pi, len(medians_2), endpoint=False)
+
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'},
+                           figsize=(6, 6))
+    ax.plot(r_1, medians_1, color='r', label=f"{group_names[0].capitalize()} group")
+    ax.plot(r_2, medians_2, color='b', label=f"{group_names[1].capitalize()} group")
+
+    # Add error bars for standard error of the mean
+    ax.errorbar(r_1, medians_1, yerr=sem_1, fmt='o', color='r')
+    ax.errorbar(r_2, medians_2, yerr=sem_2, fmt='o', color='b')
+
+    # Set custom tick labels
+    ax.set_xticks(np.linspace(0, 2*np.pi, len(roi_acronyms), endpoint=False))
+    ax.set_xticklabels(roi_acronyms, rotation=45)
+
+    # Adjust the alignment of the tick labels
+    for label in ax.get_xticklabels():
+        label.set_horizontalalignment('center')  # or 'left', 'center', etc.
+        label.set_rotation_mode('anchor')  # Optional: ensures proper rotation alignment
+
+    # Calculate the maximum value across both datasets
+    max_value = max(max(medians_1 + sem_1), max(medians_2 + sem_2))
+
+    # Place stars for significant p-values just below the max value
+    for region in range(N):
+        if p_values[region] < 0.05:
+            angle = r_1[region]  # or r_2[region] depending on which dataset you are referencing
+            ax.text(angle, max_value + 0.1*max_value, '*', horizontalalignment='center', verticalalignment='center', fontsize=15, color='black')
+            
+    ax.set_rlabel_position(-30)  # Move radial labels away from plotted line
+    ax.grid(True)
+    ax.set_title(f"{band_name.capitalize()} Band Betweenness Centrality", va="bottom")
+
+    # Position the legend at the bottom right with more spacing to the right
+    ax.legend(loc='lower right', bbox_to_anchor=(1.2, -0.2))
+
+    plt.show()
     # return (
     #     p_values,
     #     means_1,
@@ -1224,6 +1304,9 @@ def compute_centrality_and_test(
     #     group1_centrality,
     #     group2_centrality,
     # )
+    
+    # turn off Seaborn style
+    sns.set()
 
 
 def plot_connectivity_circle(
@@ -1270,15 +1353,19 @@ def plot_connectivity_circle(
         )[0]
         for roi in roi_names
     ]
-    
+
     # read colors
     node_colors = [label.color for label in labels]
     # read functional groupings
     if functional_groupings is not None:
         node_colors = node_colors[: len(functional_groupings)]
-    
+
     # We reorder the labels based on their location in the left hemi
-    label_names = roi_acronyms if functional_groupings is None else list(functional_groupings.keys())
+    label_names = (
+        roi_acronyms
+        if functional_groupings is None
+        else list(functional_groupings.keys())
+    )
     lh_labels = [
         label for label in label_names if label.endswith("lh") or label.endswith("-i")
     ]
@@ -1380,7 +1467,11 @@ def get_top_connections(data, method, roi_acronyms, n_top=3):
 
     # Remove top connections if contain control regions
     control_regions = ["lOCC-lh", "lOCC-rh", "aud-lh", "aud-rh"]
-    control_region_ids = [roi_acronyms.index(region) for region in control_regions if region in roi_acronyms]
+    control_region_ids = [
+        roi_acronyms.index(region)
+        for region in control_regions
+        if region in roi_acronyms
+    ]
     top_connections = [
         conn
         for conn in top_connections
@@ -1472,7 +1563,7 @@ def plot_connectivity_and_stats(
     # Adjust for functional groupings
     if functional_groupings is not None:
         roi_acronyms = list(functional_groupings.keys())
-        
+
     # Round negative values in the means
     if round_neg_vals:
         for data in [means_1, means_2] if not isindividual else [means_1]:
@@ -1523,9 +1614,16 @@ def plot_connectivity_and_stats(
     if not isindividual:
         # Print the table summary
         print(f"\nStatistical Test Between {group_names[0]} and {group_names[1]}:")
-        header = (["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"] if functional_groupings is None \
-            else ["Functional Group Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
-            )
+        header = (
+            ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
+            if functional_groupings is None
+            else [
+                "Functional Group Pair",
+                "P-Value",
+                "Mean ± SEM (1)",
+                "Mean ± SEM (2)",
+            ]
+        )
         table = []
         for region_pair in highlight_ij:
             roi_pair = (
@@ -1633,15 +1731,16 @@ def plot_connectivity_and_stats(
                     title_prefix=f"{titles[data_idx]}",
                     save_fig=True,
                 )
-            
+
             # Plot connectivity matrix
+            sns.set(style="white", font_scale=1.2)
             plt.figure(figsize=(10, 7))
             plt.imshow(
-                data, 
-                vmin=vmin, 
-                vmax=vmax, 
-                cmap="hot" if data_idx == pval_pos else 'viridis'
-                )
+                data,
+                vmin=vmin,
+                vmax=vmax,
+                cmap="hot" if data_idx == pval_pos else "viridis",
+            )
 
             plt.ylabel("Regions", labelpad=20)
             plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
@@ -1674,7 +1773,7 @@ def plot_connectivity_and_stats(
                     vzero = 0.0
                     vtolerance = 1.0
                     vmin, vmax = (vzero, vzero + vtolerance)
-            
+
         # Overlay values
         if data_idx == pval_pos:  # if plotting matrix
             for i in range(len(roi_acronyms)):
