@@ -1478,11 +1478,11 @@ def plot_connectivity_and_stats(
                 p_values[i, j] = np.nan
 
         # If showing only significant values, make the rest appear white
-        if show_only_significant:
-            for i in range(len(roi_names)):
-                for j in range(len(roi_names)):
-                    if p_values[i, j] >= 0.05:
-                        p_values[i, j] = np.nan
+        # if show_only_significant:
+        #     for i in range(len(roi_names)):
+        #         for j in range(len(roi_names)):
+        #             if p_values[i, j] >= 0.05:
+        #                 p_values[i, j] = np.nan
 
     # Indicate position of p-value plot
     pval_pos = 2
@@ -1543,6 +1543,22 @@ def plot_connectivity_and_stats(
     # Choose the colormap
     colormap = "hot_r"
 
+    # Create a new data variable with 0 (purple) if means_1 < means_2 and 1 (yellow) if means_1 > means_2 for given group pair
+    matrix_data_gradient = np.zeros((len(roi_names), len(roi_names)))
+    matrix_data_b_or_y = np.zeros((len(roi_names), len(roi_names)))
+    for i in range(0, len(roi_names)):
+        for j in range(0, len(roi_names)):
+            if j < i:
+                matrix_data_gradient[i][j] = means_1[i,j] - means_2[i,j]
+                if matrix_data_gradient[i][j] < 0:
+                    matrix_data_b_or_y[i][j] = 0
+                else:
+                    matrix_data_b_or_y[i][j] = 1
+            else:
+                matrix_data_gradient[i][j] = np.nan
+                matrix_data_b_or_y[i][j] = np.nan
+
+
     # Loop through means and p values for plotting
     for (
         data_idx,
@@ -1550,12 +1566,9 @@ def plot_connectivity_and_stats(
     ) in zip(
         range(len(titles)),
         [
-            means_1,
-            means_2,
             p_values,
         ],
     ):
-
         # # Plot parameters
         if vmin is None or vmax is None:  # if not already set
             if data_idx == pval_pos:
@@ -1591,10 +1604,10 @@ def plot_connectivity_and_stats(
         if not isindividual:
             fig = plt.figure()
             plt.imshow(
-                data, 
+                matrix_data_b_or_y, 
                 vmin=vmin, 
                 vmax=vmax, 
-                cmap="hot" if data_idx == pval_pos else 'viridis'
+                cmap="viridis"
                 )
 
             plt.ylabel("Regions", labelpad=20)
@@ -1607,7 +1620,7 @@ def plot_connectivity_and_stats(
 
             if set_title:
                 plt.title(f"{titles[data_idx]} | {condition} | {band}")
-            plt.colorbar()
+            #plt.colorbar()
     
 
         else:
@@ -1629,7 +1642,7 @@ def plot_connectivity_and_stats(
                     vzero = 0.0
                     vtolerance = 1.0
                     vmin, vmax = (vzero, vzero + vtolerance)
-
+                    
             plt.figure()
             plot_connectivity_circle(
                 data=data,
@@ -1651,11 +1664,12 @@ def plot_connectivity_and_stats(
             # Also plot matrix for FC values, besides just the circle
             
         # Overlay values
-        if data_idx == pval_pos:  # if plotting matrix
-            for i in range(len(roi_names)):
-                for j in range(len(roi_names)):
-                    if data[i, j] < 0.05 and not np.isnan(data[i, j]):
-                        if show_fc_vals:
+        #if data_idx == pval_pos:  # if plotting matrix
+        for i in range(len(roi_names)):
+            for j in range(len(roi_names)):
+                if data[i, j] < 0.05 and not np.isnan(data[i, j]):
+                    if show_fc_vals:
+                        if matrix_data_b_or_y[i, j] == 0:
                             plt.text(
                                 j,
                                 i,
@@ -1663,7 +1677,17 @@ def plot_connectivity_and_stats(
                                 ha="center",
                                 va="center",
                                 color="w",
-                                fontsize=overlay_fontsize,
+                                fontsize=14,
+                            )
+                        else:
+                            plt.text(
+                                j,
+                                i,
+                                round(data[i, j], 3),
+                                ha="center",
+                                va="center",
+                                color="b",
+                                fontsize=14,
                             )
 
         # Add rectangles for highlighted squares
