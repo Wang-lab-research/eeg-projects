@@ -1,3 +1,6 @@
+# Caches
+Code/eeg_toolkit/eeg_toolkit/__pycache__/
+
 # Ignore all large data
 **/Data/*
 **/Processed Data/
@@ -12,7 +15,7 @@ Chronic Low Back Pain Study/Notes/
 
 # Ignore miscellaneous code and other repos
 Code/Misc/
-Code/eeg-erds-stats/
+Code/eeg-erds-stats
 Code/eeg-unsup-pain-decoding/
 Code/purdonlabmeeg
 !Code/eeg_toolkit/
@@ -39,4 +42,3 @@ Chronic Low Back Pain Study/Code/Functional connectivity analysis/Connectivity c
 Chronic Low Back Pain Study/Code/Functional connectivity analysis/Connectivity circle/*.pdf
 Chronic Low Back Pain Study/Code/Functional connectivity analysis/*.pdf
 Chronic Low Back Pain Study/Code/Functional connectivity analysis/*.png
-
