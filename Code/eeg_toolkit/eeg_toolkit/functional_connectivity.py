@@ -1181,30 +1181,51 @@ def compute_centrality_and_test(
         N = len(functional_groupings)
         reduced_data = np.zeros((num_subjects, N))
         indices = [ids for ids in functional_groupings_ids.values()]
-        group1_and_group2_centrality = []
-        for data in [group1_centrality, group2_centrality]:
-            for i in range(len(data)):
-                for j in range(N):
-                    # Get the indices for the current group
-                    group_j = indices[j]
 
-                    # Extract the submatrix for the current group
-                    submatrix = data[i, group_j]
+        for i in range(len(group1_centrality)):
+            for j in range(N):
+                # Get the indices for the current group
+                group_j = indices[j]
 
-                    # Calculate the aggregation based on the specified method
-                    if func_grp_method == "mean":
-                        reduced_data[i, j] = np.nanmean(submatrix)
-                    elif func_grp_method == "max":
-                        reduced_data[i, j] = np.nanmax(submatrix)
-                    elif func_grp_method == "median":
-                        reduced_data[i, j] = np.nanmedian(submatrix)
-                    else:
-                        raise ValueError("Method must be 'mean', 'median', or 'max'")
+                # Extract the submatrix for the current group
+                submatrix = group1_centrality[i, group_j]
 
-            group1_and_group2_centrality.append(reduced_data)
+                # Calculate the aggregation based on the specified method
+                if func_grp_method == "mean":
+                    reduced_data[i, j] = np.nanmean(submatrix)
+                elif func_grp_method == "max":
+                    reduced_data[i, j] = np.nanmax(submatrix)
+                elif func_grp_method == "median":
+                    reduced_data[i, j] = np.nanmedian(submatrix)
+                else:
+                    raise ValueError("Method must be 'mean', 'median', or 'max'")
 
-        group1_centrality = group1_and_group2_centrality[0]
-        group2_centrality = group1_and_group2_centrality[1]
+        group1_centrality = reduced_data
+        
+        # repeat for group2
+        reduced_data = np.zeros((num_subjects, N))
+        for i in range(len(group2_centrality)):
+            for j in range(N):
+                # Get the indices for the current group
+                group_j = indices[j]
+
+                # Extract the submatrix for the current group
+                submatrix = group2_centrality[i, group_j]
+
+                # Calculate the aggregation based on the specified method
+                if func_grp_method == "mean":
+                    reduced_data[i, j] = np.nanmean(submatrix)
+                elif func_grp_method == "max":
+                    reduced_data[i, j] = np.nanmax(submatrix)
+                elif func_grp_method == "median":
+                    reduced_data[i, j] = np.nanmedian(submatrix)
+                else:
+                    raise ValueError("Method must be 'mean', 'median', or 'max'")
+
+        group2_centrality = reduced_data
+        
+        print("group1_centrality[0]", group1_centrality[0])
+        print("group2_centrality[0]", group2_centrality[0])
 
     # Perform statistical test between the nodes of both groups
     p_values = []
@@ -1268,8 +1289,8 @@ def compute_centrality_and_test(
     r_2 = np.linspace(0, 2 * np.pi, len(medians_2), endpoint=False)
 
     fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(6, 6))
-    ax.plot(r_1, medians_1, color="r", label=f"{group_names[0].capitalize()} group")
-    ax.plot(r_2, medians_2, color="b", label=f"{group_names[1].capitalize()} group")
+    ax.plot(r_1, medians_1, color="r", label=f"{group_names[0].title()} Group")
+    ax.plot(r_2, medians_2, color="b", label=f"{group_names[1].title()} Group")
 
     # Add error bars for standard error of the mean
     ax.errorbar(r_1, medians_1, yerr=sem_1, fmt="o", color="r")
@@ -1770,6 +1791,7 @@ def plot_connectivity_and_stats(
                 )
                 plt.show()
 
+            elif data_idx != pval_pos:
                 # Plot connectivity matrix
                 plt.figure(figsize=(10, 7), facecolor="white")
                 fig = plt.figure()
@@ -1797,7 +1819,7 @@ def plot_connectivity_and_stats(
                 # Plot connectivity matrix (p-values)
                 plt.figure(figsize=(10, 7), facecolor="white")
                 fig = plt.figure()
-                plt.imshow(matrix_data_b_or_y, vmin=vmin, vmax=vmax, cmap="viridis")
+                plt.imshow(matrix_data_b_or_y, vmin=vmin, vmax=vmax, cmap="coolwarm")
                 plt.grid(False)
 
                 plt.ylabel("Regions", labelpad=20)
