@@ -12,7 +12,11 @@ from mne.datasets import fetch_fsaverage
 from collections import defaultdict
 import bct
 import seaborn as sns
-sns.set_theme(style="white")
+
+sns.set(
+    # style="whitegrid",
+    font_scale=1.2
+)
 
 fs_dir = fetch_fsaverage(verbose=True)
 subject = "fsaverage"
@@ -292,6 +296,8 @@ def plot_corr(corr, title):
     """
     fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
     ax.imshow(corr, cmap="viridis", clim=np.percentile(corr, [5, 95]))
+    ax.grid(False)
+    ax.set_facecolor('white') 
     fig.suptitle(title)
 
 
@@ -916,7 +922,7 @@ def mann_whitney_test(
             # Calculate means
             means_1[i, j] = np.mean(data1)
             means_2[i, j] = np.mean(data2)
-            
+
             # Calculate SEM
             sem_1[i, j] = stats.sem(data1)
             sem_2[i, j] = stats.sem(data2)
@@ -1013,7 +1019,7 @@ def KS_test(
             # Calculate means
             means_1[i, j] = np.mean(data1)
             means_2[i, j] = np.mean(data2)
-                        
+
             # Calculate SEM
             sem_1[i, j] = stats.sem(data1)
             sem_2[i, j] = stats.sem(data2)
@@ -1175,30 +1181,51 @@ def compute_centrality_and_test(
         N = len(functional_groupings)
         reduced_data = np.zeros((num_subjects, N))
         indices = [ids for ids in functional_groupings_ids.values()]
-        group1_and_group2_centrality = []
-        for data in [group1_centrality, group2_centrality]:
-            for i in range(len(data)):
-                for j in range(N):
-                    # Get the indices for the current group
-                    group_j = indices[j]
 
-                    # Extract the submatrix for the current group
-                    submatrix = data[i, group_j]
+        for i in range(len(group1_centrality)):
+            for j in range(N):
+                # Get the indices for the current group
+                group_j = indices[j]
 
-                    # Calculate the aggregation based on the specified method
-                    if func_grp_method == "mean":
-                        reduced_data[i, j] = np.nanmean(submatrix)
-                    elif func_grp_method == "max":
-                        reduced_data[i, j] = np.nanmax(submatrix)
-                    elif func_grp_method == "median":
-                        reduced_data[i, j] = np.nanmedian(submatrix)
-                    else:
-                        raise ValueError("Method must be 'mean', 'median', or 'max'")
+                # Extract the submatrix for the current group
+                submatrix = group1_centrality[i, group_j]
 
-            group1_and_group2_centrality.append(reduced_data)
+                # Calculate the aggregation based on the specified method
+                if func_grp_method == "mean":
+                    reduced_data[i, j] = np.nanmean(submatrix)
+                elif func_grp_method == "max":
+                    reduced_data[i, j] = np.nanmax(submatrix)
+                elif func_grp_method == "median":
+                    reduced_data[i, j] = np.nanmedian(submatrix)
+                else:
+                    raise ValueError("Method must be 'mean', 'median', or 'max'")
 
-        group1_centrality = group1_and_group2_centrality[0]
-        group2_centrality = group1_and_group2_centrality[1]
+        group1_centrality = reduced_data
+        
+        # repeat for group2
+        reduced_data = np.zeros((num_subjects, N))
+        for i in range(len(group2_centrality)):
+            for j in range(N):
+                # Get the indices for the current group
+                group_j = indices[j]
+
+                # Extract the submatrix for the current group
+                submatrix = group2_centrality[i, group_j]
+
+                # Calculate the aggregation based on the specified method
+                if func_grp_method == "mean":
+                    reduced_data[i, j] = np.nanmean(submatrix)
+                elif func_grp_method == "max":
+                    reduced_data[i, j] = np.nanmax(submatrix)
+                elif func_grp_method == "median":
+                    reduced_data[i, j] = np.nanmedian(submatrix)
+                else:
+                    raise ValueError("Method must be 'mean', 'median', or 'max'")
+
+        group2_centrality = reduced_data
+        
+        print("group1_centrality[0]", group1_centrality[0])
+        print("group2_centrality[0]", group2_centrality[0])
 
     # Perform statistical test between the nodes of both groups
     p_values = []
@@ -1208,6 +1235,7 @@ def compute_centrality_and_test(
     medians_2 = []
     sem_1 = []
     sem_2 = []
+
     for j in range(N):
         data1 = group1_centrality[:, j]
         data2 = group2_centrality[:, j]
@@ -1230,7 +1258,7 @@ def compute_centrality_and_test(
         # Calculate medians
         medians_1.append(np.median(data1))
         medians_2.append(np.median(data2))
-                
+
         # Calculate SEM
         sem_1.append(stats.sem(data1))
         sem_2.append(stats.sem(data2))
@@ -1254,29 +1282,28 @@ def compute_centrality_and_test(
     print(tabulate(table, headers=header, tablefmt="pretty"))
 
     # Apply Seaborn style
-    sns.set(style="whitegrid")
+    sns.set(style="whitegrid", font_scale=1.2)
 
     # Plot betweenness centrality on polar plot
-    r_1 = np.linspace(0, 2*np.pi, len(medians_1), endpoint=False)
-    r_2 = np.linspace(0, 2*np.pi, len(medians_2), endpoint=False)
+    r_1 = np.linspace(0, 2 * np.pi, len(medians_1), endpoint=False)
+    r_2 = np.linspace(0, 2 * np.pi, len(medians_2), endpoint=False)
 
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'},
-                           figsize=(6, 6))
-    ax.plot(r_1, medians_1, color='r', label=f"{group_names[0].capitalize()} group")
-    ax.plot(r_2, medians_2, color='b', label=f"{group_names[1].capitalize()} group")
+    fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(6, 6))
+    ax.plot(r_1, medians_1, color="r", label=f"{group_names[0].title()} Group")
+    ax.plot(r_2, medians_2, color="b", label=f"{group_names[1].title()} Group")
 
     # Add error bars for standard error of the mean
-    ax.errorbar(r_1, medians_1, yerr=sem_1, fmt='o', color='r')
-    ax.errorbar(r_2, medians_2, yerr=sem_2, fmt='o', color='b')
+    ax.errorbar(r_1, medians_1, yerr=sem_1, fmt="o", color="r")
+    ax.errorbar(r_2, medians_2, yerr=sem_2, fmt="o", color="b")
 
     # Set custom tick labels
-    ax.set_xticks(np.linspace(0, 2*np.pi, len(roi_acronyms), endpoint=False))
+    ax.set_xticks(np.linspace(0, 2 * np.pi, len(roi_acronyms), endpoint=False))
     ax.set_xticklabels(roi_acronyms, rotation=45)
 
     # Adjust the alignment of the tick labels
     for label in ax.get_xticklabels():
-        label.set_horizontalalignment('center')  # or 'left', 'center', etc.
-        label.set_rotation_mode('anchor')  # Optional: ensures proper rotation alignment
+        label.set_horizontalalignment("center")  # or 'left', 'center', etc.
+        label.set_rotation_mode("anchor")  # Optional: ensures proper rotation alignment
 
     # Calculate the maximum value across both datasets
     max_value = max(max(medians_1 + sem_1), max(medians_2 + sem_2))
@@ -1284,15 +1311,30 @@ def compute_centrality_and_test(
     # Place stars for significant p-values just below the max value
     for region in range(N):
         if p_values[region] < 0.05:
-            angle = r_1[region]  # or r_2[region] depending on which dataset you are referencing
-            ax.text(angle, max_value + 0.1*max_value, '*', horizontalalignment='center', verticalalignment='center', fontsize=15, color='black')
-            
+            angle = r_1[
+                region
+            ]  # or r_2[region] depending on which dataset you are referencing
+            ax.text(
+                angle,
+                max_value + 0.1 * max_value,
+                "*",
+                horizontalalignment="center",
+                verticalalignment="center",
+                fontsize=15,
+                color="black",
+            )
+
     ax.set_rlabel_position(-30)  # Move radial labels away from plotted line
     ax.grid(True)
-    ax.set_title(f"{band_name.capitalize()} Band Betweenness Centrality", va="bottom")
+    ax.set_title(
+        f"{band_name.capitalize()} Band Betweenness Centrality",
+        va="bottom",
+        fontsize=18,
+        pad=10,
+    )
 
     # Position the legend at the bottom right with more spacing to the right
-    ax.legend(loc='lower right', bbox_to_anchor=(1.2, -0.2))
+    ax.legend(loc="lower right", bbox_to_anchor=(1.2, -0.2))
 
     plt.show()
     # return (
@@ -1304,7 +1346,7 @@ def compute_centrality_and_test(
     #     group1_centrality,
     #     group2_centrality,
     # )
-    
+
     # turn off Seaborn style
     sns.set()
 
@@ -1592,6 +1634,8 @@ def plot_connectivity_and_stats(
         for i in range(len(roi_acronyms)):
             for j in range(i, len(roi_acronyms)):
                 p_values[i, j] = np.nan
+                means_1[i, j] = np.nan
+                means_2[i, j] = np.nan
 
         # If showing only significant values, make the rest appear white
         if show_only_significant:
@@ -1607,13 +1651,13 @@ def plot_connectivity_and_stats(
     method = get_method_plot_name(method)
 
     # Set font sizes
-    overlay_fontsize = 9
+    overlay_fontsize = 7.5
 
     ###############################################################################
     # Print table summary of mean and sem, if not plotting individual data
     if not isindividual:
         # Print the table summary
-        print(f"\nStatistical Test Between {group_names[0]} and {group_names[1]}:")
+        print(f"\nMann Whitney U Test between {group_names[0]} and {group_names[1]}:")
         header = (
             ["ROI Pair", "P-Value", "Mean ± SEM (1)", "Mean ± SEM (2)"]
             if functional_groupings is None
@@ -1667,12 +1711,12 @@ def plot_connectivity_and_stats(
     colormap = "hot_r"
 
     # Create a new data variable with 0 (purple) if means_1 < means_2 and 1 (yellow) if means_1 > means_2 for given group pair
-    matrix_data_gradient = np.zeros((len(roi_names), len(roi_names)))
-    matrix_data_b_or_y = np.zeros((len(roi_names), len(roi_names)))
-    for i in range(0, len(roi_names)):
-        for j in range(0, len(roi_names)):
+    matrix_data_gradient = np.zeros((len(roi_acronyms), len(roi_acronyms)))
+    matrix_data_b_or_y = np.zeros((len(roi_acronyms), len(roi_acronyms)))
+    for i in range(0, len(roi_acronyms)):
+        for j in range(0, len(roi_acronyms)):
             if j < i:
-                matrix_data_gradient[i][j] = means_1[i,j] - means_2[i,j]
+                matrix_data_gradient[i][j] = means_1[i, j] - means_2[i, j]
                 if matrix_data_gradient[i][j] < 0:
                     matrix_data_b_or_y[i][j] = 0
                 else:
@@ -1681,7 +1725,6 @@ def plot_connectivity_and_stats(
                 matrix_data_gradient[i][j] = np.nan
                 matrix_data_b_or_y[i][j] = np.nan
 
-
     # Loop through means and p values for plotting
     for (
         data_idx,
@@ -1689,6 +1732,8 @@ def plot_connectivity_and_stats(
     ) in zip(
         range(len(titles)),
         [
+            means_1,
+            means_2,
             p_values,
         ],
     ):
@@ -1741,33 +1786,111 @@ def plot_connectivity_and_stats(
                     vmax=vmax,
                     fontsize_names=13,
                     fontsize_colorbar=13,
-                    title_prefix=f"{titles[data_idx]}",
+                    title_prefix=f"{titles[data_idx]} Group",
                     save_fig=True,
+                )
+                plt.show()
 
-            # Plot connectivity matrix
-            sns.set(style="white", font_scale=1.2)
-            plt.figure(figsize=(10, 7))
-            fig = plt.figure()
-            plt.imshow(
-                matrix_data_b_or_y, 
-                vmin=vmin, 
-                vmax=vmax, 
-                cmap="viridis"
+            elif data_idx != pval_pos:
+                # Plot connectivity matrix
+                plt.figure(figsize=(10, 7), facecolor="white")
+                fig = plt.figure()
+                plt.imshow(data, vmin=vmin, vmax=vmax, cmap="viridis")
+                plt.grid(False)
+
+                plt.ylabel("Regions", labelpad=20)
+                plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
+
+                plt.xlabel("Regions", labelpad=20)
+                plt.xticks(
+                    range(len(roi_acronyms)),
+                    labels=roi_acronyms,
+                    rotation=45,
+                    ha="right",
                 )
 
-            plt.ylabel("Regions", labelpad=20)
-            plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
+                if set_title:
+                    plt.title(f"{titles[data_idx]} Group",
+                              fontsize=18, pad=10)
+                plt.colorbar()
+                plt.show()
 
-            plt.xlabel("Regions", labelpad=20)
-            plt.xticks(
-                range(len(roi_acronyms)), labels=roi_acronyms, rotation=45, ha="right"
-            )
+            elif data_idx == pval_pos:
+                # Plot connectivity matrix (p-values)
+                plt.figure(figsize=(10, 7), facecolor="white")
+                fig = plt.figure()
+                plt.imshow(matrix_data_b_or_y, vmin=vmin, vmax=vmax, cmap="coolwarm")
+                plt.grid(False)
 
-            if set_title:
-                plt.title(f"{titles[data_idx]} | {condition} | {band}")
-            #plt.colorbar()
-    
-        else:
+                plt.ylabel("Regions", labelpad=20)
+                plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
+
+                plt.xlabel("Regions", labelpad=20)
+                plt.xticks(
+                    range(len(roi_acronyms)),
+                    labels=roi_acronyms,
+                    rotation=45,
+                    ha="right",
+                )
+
+                if set_title:
+                    plt.title(
+                        f"{titles[data_idx]} | {condition} | {band}",
+                        fontsize=18,
+                        pad=10,
+                    )
+                # plt.colorbar()
+
+                # Overlay values
+                for i in range(len(roi_acronyms)):
+                    for j in range(len(roi_acronyms)):
+                        if data[i, j] < 0.05 and not np.isnan(data[i, j]):
+                            if show_fc_vals:
+                                if matrix_data_b_or_y[i, j] == 0:
+                                    plt.text(
+                                        j,
+                                        i,
+                                        round(data[i, j], 3),
+                                        ha="center",
+                                        va="center",
+                                        color="w",
+                                        fontsize=(
+                                            14
+                                            if functional_groupings is not None
+                                            else overlay_fontsize
+                                        ),
+                                    )
+                                else:
+                                    plt.text(
+                                        j,
+                                        i,
+                                        round(data[i, j], 3),
+                                        ha="center",
+                                        va="center",
+                                        color="b",
+                                        fontsize=(
+                                            14
+                                            if functional_groupings is not None
+                                            else overlay_fontsize
+                                        ),
+                                    )
+
+                # Add rectangles for highlighted squares
+                if highlight_pvals:
+                    for i, j in highlight_ij:
+                        plt.add_patch(
+                            plt.Rectangle(
+                                (j - 0.5, i - 0.5),
+                                1,
+                                1,
+                                fill=False,
+                                edgecolor="red",
+                                linewidth=2,
+                            )
+                        )
+                plt.show()
+
+        else:  # is individual
             # First change vmin and vmax for individual plots
             if isindividual:
                 if method == "dwPLI":
@@ -1786,46 +1909,6 @@ def plot_connectivity_and_stats(
                     vzero = 0.0
                     vtolerance = 1.0
                     vmin, vmax = (vzero, vzero + vtolerance)
-
-        # Overlay values
-        if data_idx == pval_pos:  # if plotting matrix
-            for i in range(len(roi_acronyms)):
-                for j in range(len(roi_acronyms)):
-                    if data[i, j] < 0.05 and not np.isnan(data[i, j]):
-                        if show_fc_vals:
-                            plt.text(
-                                j,
-                                i,
-                                round(data[i, j], 3),
-                                ha="center",
-                                va="center",
-                                color="w",
-                                fontsize=14,
-                            )
-                        else:
-                            plt.text(
-                                j,
-                                i,
-                                round(data[i, j], 3),
-                                ha="center",
-                                va="center",
-                                color="b",
-                                fontsize=14,
-                            )
-
-        # Add rectangles for highlighted squares
-        if highlight_pvals:
-            for i, j in highlight_ij:
-                plt.add_patch(
-                    plt.Rectangle(
-                        (j - 0.5, i - 0.5),
-                        1,
-                        1,
-                        fill=False,
-                        edgecolor="red",
-                        linewidth=2,
-                    )
-                )
 
         filename = f"{condition}_{band}_{method}.png"
         if fig and save_fig and not isindividual:
