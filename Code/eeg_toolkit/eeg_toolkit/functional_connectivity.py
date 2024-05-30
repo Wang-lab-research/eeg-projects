@@ -1666,6 +1666,22 @@ def plot_connectivity_and_stats(
     # Choose the colormap
     colormap = "hot_r"
 
+    # Create a new data variable with 0 (purple) if means_1 < means_2 and 1 (yellow) if means_1 > means_2 for given group pair
+    matrix_data_gradient = np.zeros((len(roi_names), len(roi_names)))
+    matrix_data_b_or_y = np.zeros((len(roi_names), len(roi_names)))
+    for i in range(0, len(roi_names)):
+        for j in range(0, len(roi_names)):
+            if j < i:
+                matrix_data_gradient[i][j] = means_1[i,j] - means_2[i,j]
+                if matrix_data_gradient[i][j] < 0:
+                    matrix_data_b_or_y[i][j] = 0
+                else:
+                    matrix_data_b_or_y[i][j] = 1
+            else:
+                matrix_data_gradient[i][j] = np.nan
+                matrix_data_b_or_y[i][j] = np.nan
+
+
     # Loop through means and p values for plotting
     for (
         data_idx,
@@ -1673,12 +1689,9 @@ def plot_connectivity_and_stats(
     ) in zip(
         range(len(titles)),
         [
-            means_1,
-            means_2,
             p_values,
         ],
     ):
-
         # # Plot parameters
         if vmin is None or vmax is None:  # if not already set
             if data_idx == pval_pos:
@@ -1730,17 +1743,17 @@ def plot_connectivity_and_stats(
                     fontsize_colorbar=13,
                     title_prefix=f"{titles[data_idx]}",
                     save_fig=True,
-                )
 
             # Plot connectivity matrix
             sns.set(style="white", font_scale=1.2)
             plt.figure(figsize=(10, 7))
+            fig = plt.figure()
             plt.imshow(
-                data,
-                vmin=vmin,
-                vmax=vmax,
-                cmap="hot" if data_idx == pval_pos else "viridis",
-            )
+                matrix_data_b_or_y, 
+                vmin=vmin, 
+                vmax=vmax, 
+                cmap="viridis"
+                )
 
             plt.ylabel("Regions", labelpad=20)
             plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
@@ -1752,8 +1765,8 @@ def plot_connectivity_and_stats(
 
             if set_title:
                 plt.title(f"{titles[data_idx]} | {condition} | {band}")
-            plt.colorbar()
-
+            #plt.colorbar()
+    
         else:
             # First change vmin and vmax for individual plots
             if isindividual:
@@ -1787,7 +1800,17 @@ def plot_connectivity_and_stats(
                                 ha="center",
                                 va="center",
                                 color="w",
-                                fontsize=overlay_fontsize,
+                                fontsize=14,
+                            )
+                        else:
+                            plt.text(
+                                j,
+                                i,
+                                round(data[i, j], 3),
+                                ha="center",
+                                va="center",
+                                color="b",
+                                fontsize=14,
                             )
 
         # Add rectangles for highlighted squares
