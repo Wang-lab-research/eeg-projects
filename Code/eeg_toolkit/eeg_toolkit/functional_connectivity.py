@@ -1112,7 +1112,10 @@ def compute_centrality_and_test(
         and functional_groupings is None
     ):
         s1_lh_index = roi_acronyms.index("S1-i")
-
+     
+    # Get number of regions   
+    N = group1_stack.shape[1] # take num regions from data itself
+    
     # For each subject, compute betweenness centrality
     for i in range(len(group1_stack)):
         # Make adjacency matrix symmetric first
@@ -1133,15 +1136,10 @@ def compute_centrality_and_test(
             group1_centrality.append(sub_bc)
 
         # Normalize betweenness centrality
-        N = (
-            len(roi_acronyms)
-            if functional_groupings is None
-            else len(functional_groupings)
-        )
         bc = group1_centrality[i]
         bc_norm = bc / ((N - 1) * (N - 2))
         group1_centrality[i] = bc_norm
-
+        
     # For each subject, compute betweenness centrality
     for i in range(len(group2_stack)):
         # Make adjacency matrix symmetric first
@@ -1162,11 +1160,6 @@ def compute_centrality_and_test(
             group2_centrality.append(sub_bc)
 
         # Normalize betweenness centrality
-        N = (
-            len(roi_acronyms)
-            if functional_groupings is None
-            else len(functional_groupings)
-        )
         bc = group2_centrality[i]
         bc_norm = bc / ((N - 1) * (N - 2))
         group2_centrality[i] = bc_norm
@@ -1175,6 +1168,7 @@ def compute_centrality_and_test(
     group1_centrality = np.array(group1_centrality)
     group2_centrality = np.array(group2_centrality)
 
+        
     # If functional_groupings
     if functional_groupings is not None:
         num_subjects = len(group1_centrality)
@@ -1223,9 +1217,6 @@ def compute_centrality_and_test(
                     raise ValueError("Method must be 'mean', 'median', or 'max'")
 
         group2_centrality = reduced_data
-        
-        print("group1_centrality[0]", group1_centrality[0])
-        print("group2_centrality[0]", group2_centrality[0])
 
     # Perform statistical test between the nodes of both groups
     p_values = []
@@ -1770,31 +1761,28 @@ def plot_connectivity_and_stats(
 
         # Plot circle for FC values, and connectivity matrix just for p-values
         if not isindividual:
-            if data_idx != pval_pos and functional_groupings is None:
-                # Plot connectivity circle
-                plt.figure(figsize=(10, 7))
-                plot_connectivity_circle(
-                    data=data,
-                    method=method,
-                    band=band,
-                    roi_names=roi_names,
-                    roi_acronyms=roi_acronyms,
-                    condition=condition,
-                    save_path=save_path,
-                    colormap=colormap,
-                    vmin=vmin,
-                    vmax=vmax,
-                    fontsize_names=13,
-                    fontsize_colorbar=13,
-                    title_prefix=f"{titles[data_idx]} Group",
-                    save_fig=True,
-                )
-                plt.show()
-
-            elif data_idx != pval_pos:
+            if data_idx != pval_pos:
+                if functional_groupings is None:
+                    # Plot connectivity circle
+                    plot_connectivity_circle(
+                        data=data,
+                        method=method,
+                        band=band,
+                        roi_names=roi_names,
+                        roi_acronyms=roi_acronyms,
+                        condition=condition,
+                        save_path=save_path,
+                        colormap=colormap,
+                        vmin=vmin,
+                        vmax=vmax,
+                        fontsize_names=13,
+                        fontsize_colorbar=13,
+                        title_prefix=f"{titles[data_idx]} Group",
+                        save_fig=True,
+                    )
+                
                 # Plot connectivity matrix
                 plt.figure(figsize=(10, 7), facecolor="white")
-                fig = plt.figure()
                 plt.imshow(data, vmin=vmin, vmax=vmax, cmap="viridis")
                 plt.grid(False)
 
@@ -1818,7 +1806,6 @@ def plot_connectivity_and_stats(
             elif data_idx == pval_pos:
                 # Plot connectivity matrix (p-values)
                 plt.figure(figsize=(10, 7), facecolor="white")
-                fig = plt.figure()
                 plt.imshow(matrix_data_b_or_y, vmin=vmin, vmax=vmax, cmap="coolwarm")
                 plt.grid(False)
 
@@ -1846,7 +1833,7 @@ def plot_connectivity_and_stats(
                     for j in range(len(roi_acronyms)):
                         if data[i, j] < 0.05 and not np.isnan(data[i, j]):
                             if show_fc_vals:
-                                if matrix_data_b_or_y[i, j] == 0:
+                                if matrix_data_b_or_y[i, j] == 0 or matrix_data_b_or_y[i, j] == 1:
                                     plt.text(
                                         j,
                                         i,
