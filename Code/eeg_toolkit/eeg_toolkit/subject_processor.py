@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import mne
 from mne.time_frequency import tfr_array_morlet, AverageTFRArray
 from IPython.display import clear_output
-import os
+import seaborn as sns
+sns.set(style="whitegrid", font_scale=1.2)
 
 class Subject:
     def __init__(self, subject_id):
@@ -60,13 +61,12 @@ class SubjectProcessor:
         # Select just hand 256 mN condition (label=3)
         stc_epo_array = stc_epo[stim_labels == 3]
 
-        # Eyes Open STC
-        print(os.listdir(self.EO_resting_data_path))
-        stc_eo_fname = glob(f"{self.EO_resting_data_path}/{this_sub_id}_eyes_open.pkl")
-        # [0]
-        stc_eo = pickle.load(open(stc_eo_fname[0], "rb"))
-        stc_eo = np.array(stc_eo)
-        
+        # # Eyes Open STC
+        # stc_eo_fname = glob(f"{self.EO_resting_data_path}/{this_sub_id}_eyes_open.pkl")
+        # # [0]
+        # stc_eo = pickle.load(open(stc_eo_fname[0], "rb"))
+        # stc_eo = np.array(stc_eo)
+
         # Define parameters for the TFR computation
         freqs = np.logspace(*np.log10([1, 100]), num=50)
         n_cycles = freqs / 2.0
@@ -94,15 +94,34 @@ class SubjectProcessor:
             nave=stc_epo_array.shape[0],
         )
 
-        # Plot evoked
-        tfr.plot(
-            baseline=(-2.5, 0.0),
-            tmin=0.0,
-            tmax=1.0,
-            picks=[0],
-            mode="zscore",
-            title=f"Evoked Time-Frequency Representation(Subject {this_sub_id})",
-        )
+        # Plot evoked TFR
+        fig, axes = plt.subplots(6 , 2, figsize=(12, 6))
+        for i, roi in enumerate(self.roi_acronyms):
+            ax = axes[i//2, i%2]
+            tfr.plot(
+                baseline=(-0.2, 0.0),
+                tmin=0.0,
+                tmax=1.0,
+                picks=[i],
+                mode="zscore",
+                title="Representative Evoked Stimulus Response (Chronic Pain subject)",
+                yscale="linear",
+                colorbar=False,
+                axes=ax,
+            )
+            ax.set_title(roi)
+            
+            # Don't set ylabels
+            if i > 0:
+                ax[i].set_ylabel("")
+
+        # Set labels
+        ax[6].set_xlabel("Time (s)")
+        ax
+        ax.set_xlabel(" ")        
+        fig.ylabel()
+        fig.colorbar(ax.get_images()[0])
+        # fig.tight_layout()
         plt.show()
 
         # Plot averaged raw trace from evoked
@@ -110,8 +129,8 @@ class SubjectProcessor:
         average_trace = np.mean(stc_epo_array, axis=0)
 
         # Plot the average trace for each channel
-        plt.figure(figsize=(12, 6))
-        
+        fig, ax = plt.subplots(6, 2, figsize=(12, 6))
+
         # Calculate the time vector
         time_range = (-2.5, 2.5)  # Time range in seconds
         timepoints = np.linspace(time_range[0], time_range[1], average_trace.shape[1])
@@ -119,24 +138,24 @@ class SubjectProcessor:
         # Find the index for t=0
         zero_index = np.where(timepoints == 0)[0][0]
 
-        # Plot the average trace for each channel
-        plt.figure(figsize=(12, 6))
-
+        # Plot the average trace
         # Choose the channel you want to plot
         channel = 0
-        plt.plot(average_trace[channel], label=f'Channel {epochs.info["ch_names"][channel]}')
+        plt.plot(
+            timepoints, 
+            average_trace[channel], 
+            label=f'Channel {epochs.info["ch_names"][channel]}'
+        )
 
         # Add a vertical red line at t=0
-        plt.axvline(x=zero_index, color='red', linestyle='--', label='t=0')
+        plt.axvline(x=zero_index, color="red", linestyle="--", label="t=0")
 
         # Add labels and legend
-        plt.xlabel('Time (s)')
-        plt.ylabel('Amplitude')
-        plt.title('Average trace of Hand 256 mN Trials')
+        plt.xlabel("Time (s)")
+        plt.ylabel("Amplitude")
+        plt.title("Average trace of Hand 256 mN Trials")
         plt.legend()
         plt.show()
-
-        # TODO: Plot resting eyes open
 
     def get_user_response(self):
         response = input(

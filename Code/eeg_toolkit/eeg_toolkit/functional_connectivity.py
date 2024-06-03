@@ -1387,8 +1387,9 @@ def plot_connectivity_circle(
         for roi in roi_names
     ]
 
-    # read colors
-    node_colors = [label.color for label in labels]
+    # set custom colors
+    node_colors = ["#0b7014","#951ab0","#8aedba","#261ab0","#477ed1","#bd6fed"]*2
+    
     # read functional groupings
     if functional_groupings is not None:
         node_colors = node_colors[: len(functional_groupings)]
