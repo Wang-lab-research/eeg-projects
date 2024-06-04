@@ -7,10 +7,13 @@ import mne
 from mne.time_frequency import tfr_array_morlet, AverageTFRArray
 from IPython.display import clear_output
 import seaborn as sns
-sns.set(style="whitegrid", font_scale=1.2)
+from typing import Dict, List
+
+sns.set(style="white", font_scale=1.5)
+
 
 class Subject:
-    def __init__(self, subject_id):
+    def __init__(self, subject_id: str):
         assert isinstance(subject_id, str), "Subject ID must be a string"
         self.subject_id = subject_id
         self.response = None
@@ -20,7 +23,7 @@ class Subject:
 
 
 class SubjectProcessor:
-    def __init__(self, paths_dict, roi_acronyms):
+    def __init__(self, paths_dict: Dict[str, str], roi_acronyms: List[str]):
         self.yes_list = []
         self.no_list = []
         self.maybe_list = []
@@ -35,11 +38,11 @@ class SubjectProcessor:
         self.sfreq = 400  # Hz
         self.roi_acronyms = roi_acronyms
 
-    def receive_input(self):
-        subject_id = input("Enter subject ID: ")
-        return Subject(subject_id)
-
-    def plot_subject(self, subject):
+    def _load_complete_data(
+        self,
+        subject: Subject,
+    ):
+        """Load epochs, STC, and Resting Eyes Open"""
         assert isinstance(subject, Subject), "Input must be an instance of Subject"
         this_sub_id = subject.subject_id
 
@@ -62,10 +65,18 @@ class SubjectProcessor:
         stc_epo_array = stc_epo[stim_labels == 3]
 
         # # Eyes Open STC
+        stc_eo = None
         # stc_eo_fname = glob(f"{self.EO_resting_data_path}/{this_sub_id}_eyes_open.pkl")
         # # [0]
         # stc_eo = pickle.load(open(stc_eo_fname[0], "rb"))
         # stc_eo = np.array(stc_eo)
+
+        return epochs, stc_epo_array, stc_eo
+
+    def _compute_tfr(self, subject: Subject) -> AverageTFRArray:
+        epochs, stc_epo_array, stc_eo = self._load_complete_data(subject)
+        assert isinstance(stc_epo_array, np.ndarray), "Input must be an array"
+        assert isinstance(epochs, mne.epochs.EpochsFIF), "Input must be an Epochs object"
 
         # Define parameters for the TFR computation
         freqs = np.logspace(*np.log10([1, 100]), num=50)
@@ -94,70 +105,92 @@ class SubjectProcessor:
             nave=stc_epo_array.shape[0],
         )
 
-        # Plot evoked TFR
-        fig, axes = plt.subplots(6 , 2, figsize=(12, 6))
+        return tfr
+
+    def plot_TFR_and_trace(self, subject: Subject, channel="Fp1", time_range=(-0.2, 0.8)):
+        tfr = self._compute_tfr(subject)
+        epochs, _, _ = self._load_complete_data(subject)
+        assert isinstance(tfr, AverageTFRArray), "Input must be an AverageTFRArray"
+        assert isinstance(epochs, mne.epochs.EpochsFIF), "Input must be an Epochs object"
+
+        fig, axes = plt.subplots(6, 2, figsize=(12, 16), sharex=False, sharey=True)
         for i, roi in enumerate(self.roi_acronyms):
-            ax = axes[i//2, i%2]
+            col = i // 6
+            row = i % 6
+            ax = axes[row, col]
+            print(ax)
             tfr.plot(
-                baseline=(-0.2, 0.0),
+                baseline=(-2.5, 0.0),
                 tmin=0.0,
                 tmax=1.0,
-                picks=[i],
+                picks=roi,
                 mode="zscore",
-                title="Representative Evoked Stimulus Response (Chronic Pain subject)",
+                title="Representative Chronic Pain Response to Mechanical Stimulus",
                 yscale="linear",
-                colorbar=False,
+                colorbar=True,
+                cmap="turbo",
                 axes=ax,
+                show=False,
             )
             ax.set_title(roi)
-            
+
             # Don't set ylabels
             if i > 0:
-                ax[i].set_ylabel("")
+                ax.set_ylabel("")
 
-        # Set labels
-        ax[6].set_xlabel("Time (s)")
-        ax
-        ax.set_xlabel(" ")        
-        fig.ylabel()
-        fig.colorbar(ax.get_images()[0])
-        # fig.tight_layout()
+        clear_output(wait=True)
+        fig.tight_layout()
         plt.show()
 
         # Plot averaged raw trace from evoked
-        # Calculate the average across trials (axis=0)
-        average_trace = np.mean(stc_epo_array, axis=0)
+        average_trace = np.mean(epochs.get_data(copy=False), axis=0)
 
-        # Plot the average trace for each channel
-        fig, ax = plt.subplots(6, 2, figsize=(12, 6))
+        # Calculate sample start and end indices based on sampling frequency
+        time_range = (-0.2, 0.8)  # Time range in seconds
 
-        # Calculate the time vector
-        time_range = (-2.5, 2.5)  # Time range in seconds
-        timepoints = np.linspace(time_range[0], time_range[1], average_trace.shape[1])
+        # Calculate sample start and end indices based on sampling frequency
+        sfreq = self.sfreq
+        # The total duration of the epoch in seconds
+        total_duration = average_trace.shape[1] / sfreq
+        time_min = -total_duration / 2
 
-        # Find the index for t=0
-        zero_index = np.where(timepoints == 0)[0][0]
+        # Convert time range to sample indices
+        sample_start = int((time_range[0] - time_min) * sfreq)
+        sample_end = int((time_range[1] - time_min) * sfreq)
 
-        # Plot the average trace
-        # Choose the channel you want to plot
-        channel = 0
-        plt.plot(
-            timepoints, 
-            average_trace[channel], 
-            label=f'Channel {epochs.info["ch_names"][channel]}'
+        # Ensure sample indices are within valid range
+        sample_start = max(sample_start, 0)
+        sample_end = min(sample_end, average_trace.shape[1])
+
+        # Generate time points corresponding to the sliced average trace
+        timepoints = np.linspace(
+            time_range[0], time_range[1], sample_end - sample_start
         )
 
-        # Add a vertical red line at t=0
-        plt.axvline(x=zero_index, color="red", linestyle="--", label="t=0")
+        # Select the channel to plot
+        channel = "Fp1"
+        channel_index = epochs.info["ch_names"].index(channel)
 
-        # Add labels and legend
+        # Slice the average trace for the specified time range
+        average_trace = average_trace[channel_index, sample_start:sample_end]
+
+        plt.figure(figsize=(8, 4))
+        plt.plot(
+            timepoints,
+            average_trace,
+            label=f"Channel {channel}",
+        )
+
+        plt.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
         plt.xlabel("Time (s)")
-        plt.ylabel("Amplitude")
-        plt.title("Average trace of Hand 256 mN Trials")
+        plt.ylabel("Amplitude (µV)")
+        plt.title(" Average Trace during Hand 256 mN Mechanical Stimulus")
+        plt.tight_layout()
         plt.legend()
+        plt.xlim(time_range)
         plt.show()
 
-    def get_user_response(self):
+    def _get_user_response(self) -> str:
         response = input(
             "Is this subject a candidate for representative TFR? (yes/no/maybe): "
         )
@@ -168,8 +201,8 @@ class SubjectProcessor:
         ], "Response must be 'yes', 'no', or 'maybe'"
         return response.lower()
 
-    def process_response(self, subject):
-        response = self.get_user_response()
+    def process_response(self, subject: Subject):
+        response = self._get_user_response()
         if response == "yes":
             self.yes_list.append(subject.subject_id)
             subject.response = "yes"
@@ -179,11 +212,7 @@ class SubjectProcessor:
         elif response == "maybe":
             self.maybe_list.append(subject.subject_id)
             subject.response = "maybe"
-        else:
-            print("Invalid response. Please enter yes, no, or maybe.")
-            self.process_response(subject)
 
-        # Clear output for next subject
         clear_output(wait=True)
 
     def display_results(self):
@@ -193,12 +222,33 @@ class SubjectProcessor:
 
 
 def main():
-    processor = SubjectProcessor()
+    paths_dict = {
+        "processed_data_path": "/path/to/processed_data",
+        "stc_path": "/path/to/stc",
+        "EO_resting_data_path": "/path/to/EO_resting_data",
+        "zscored_epochs_data_path": "/path/to/zscored_epochs_data",
+    }
+    roi_acronyms = [
+        "ROI1",
+        "ROI2",
+        "ROI3",
+        "ROI4",
+        "ROI5",
+        "ROI6",
+        "ROI7",
+        "ROI8",
+        "ROI9",
+        "ROI10",
+        "ROI11",
+        "ROI12",
+    ]
 
-    # Example usage: iterate through the subjects
+    processor = SubjectProcessor(paths_dict, roi_acronyms)
+
     for sub_id in ["018"]:
         subject = Subject(sub_id)
-        processor.plot_subject(subject)
+        processor.plot_TFR_and_trace(subject,
+                                     channel="Fp1", time_range=(-0.2, 0.8))
         processor.process_response(subject)
 
     processor.display_results()

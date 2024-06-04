@@ -1351,7 +1351,7 @@ def plot_connectivity_circle(
     condition,
     save_path,
     functional_groupings=None,
-    functional_group_ids=None,
+    functional_groupings_ids=None,
     func_grp_method=None,
     vmin=None,
     vmax=None,
@@ -1388,8 +1388,13 @@ def plot_connectivity_circle(
     ]
 
     # set custom colors
-    node_colors = ["#0b7014","#951ab0","#8aedba","#261ab0","#477ed1","#bd6fed"]*2
-    
+    if functional_groupings is None:
+        node_colors = ["#0b7014","#951ab0","#8aedba","#261ab0","#477ed1","#bd6fed"]*2
+    else: 
+        node_colors = ["#261ab0","#261ab0",
+                       "#bd6fed","#bd6fed",
+                       "#8aedba","#8aedba",]
+        
     # read functional groupings
     if functional_groupings is not None:
         node_colors = node_colors[: len(functional_groupings)]
@@ -1763,46 +1768,49 @@ def plot_connectivity_and_stats(
         # Plot circle for FC values, and connectivity matrix just for p-values
         if not isindividual:
             if data_idx != pval_pos:
-                if functional_groupings is None:
-                    # Plot connectivity circle
-                    plot_connectivity_circle(
-                        data=data,
-                        method=method,
-                        band=band,
-                        roi_names=roi_names,
-                        roi_acronyms=roi_acronyms,
-                        condition=condition,
-                        save_path=save_path,
-                        colormap=colormap,
-                        vmin=vmin,
-                        vmax=vmax,
-                        fontsize_names=13,
-                        fontsize_colorbar=13,
-                        title_prefix=f"{titles[data_idx]} Group",
-                        save_fig=True,
-                    )
-                
-                # Plot connectivity matrix
-                plt.figure(figsize=(10, 7), facecolor="white")
-                plt.imshow(data, vmin=vmin, vmax=vmax, cmap="viridis")
-                plt.grid(False)
-
-                plt.ylabel("Regions", labelpad=20)
-                plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
-
-                plt.xlabel("Regions", labelpad=20)
-                plt.xticks(
-                    range(len(roi_acronyms)),
-                    labels=roi_acronyms,
-                    rotation=45,
-                    ha="right",
+                # Plot connectivity circle
+                plot_connectivity_circle(
+                    data=data,
+                    method=method,
+                    band=band,
+                    roi_names=roi_names,
+                    roi_acronyms=roi_acronyms,
+                    condition=condition,
+                    save_path=save_path,
+                    colormap=colormap,
+                    vmin=vmin,
+                    vmax=vmax,
+                    functional_groupings=functional_groupings,
+                    functional_groupings_ids=functional_groupings_ids,
+                    fontsize_names=13,
+                    fontsize_colorbar=13,
+                    title_prefix=f"{titles[data_idx]} Group",
+                    save_fig=True,
                 )
+                
+                plot_matrix=False
+                if plot_matrix:    
+                    # Plot connectivity matrix
+                    plt.figure(figsize=(10, 7), facecolor="white")
+                    plt.imshow(data, vmin=vmin, vmax=vmax, cmap="viridis")
+                    plt.grid(False)
 
-                if set_title:
-                    plt.title(f"{titles[data_idx]} Group",
-                              fontsize=18, pad=10)
-                plt.colorbar()
-                plt.show()
+                    plt.ylabel("Regions", labelpad=20)
+                    plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
+
+                    plt.xlabel("Regions", labelpad=20)
+                    plt.xticks(
+                        range(len(roi_acronyms)),
+                        labels=roi_acronyms,
+                        rotation=45,
+                        ha="right",
+                    )
+
+                    if set_title:
+                        plt.title(f"{titles[data_idx]} Group",
+                                fontsize=18, pad=10)
+                    plt.colorbar()
+                    plt.show()
 
             elif data_idx == pval_pos:
                 # Plot connectivity matrix (p-values)
