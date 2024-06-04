@@ -1270,22 +1270,28 @@ def compute_centrality_and_test(
         mean_sem_1 = f"{np.round(means_1[region],3)} ± {np.round(sem_1[region],3)}"
         mean_sem_2 = f"{np.round(means_2[region],3)} ± {np.round(sem_2[region],3)}"
         table.append([roi_name, p_val, mean_sem_1, mean_sem_2])
+        
+    
     print(tabulate(table, headers=header, tablefmt="pretty"))
 
     # Apply Seaborn style
     sns.set(style="whitegrid", font_scale=1.2)
+    
+    # Get data for plotting
+    plot_data1 = means_1
+    plot_data2 = means_2
 
     # Plot betweenness centrality on polar plot
-    r_1 = np.linspace(0, 2 * np.pi, len(medians_1), endpoint=False)
-    r_2 = np.linspace(0, 2 * np.pi, len(medians_2), endpoint=False)
+    r_1 = np.linspace(0, 2 * np.pi, len(plot_data1), endpoint=False)
+    r_2 = np.linspace(0, 2 * np.pi, len(plot_data2), endpoint=False)
 
     fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(6, 6))
-    ax.plot(r_1, medians_1, color="r", label=f"{group_names[0].title()} Group")
-    ax.plot(r_2, medians_2, color="b", label=f"{group_names[1].title()} Group")
+    ax.plot(r_1, plot_data1, color="r", label=f"{group_names[0].title()} Group")
+    ax.plot(r_2, plot_data2, color="b", label=f"{group_names[1].title()} Group")
 
     # Add error bars for standard error of the mean
-    ax.errorbar(r_1, medians_1, yerr=sem_1, fmt="o", color="r")
-    ax.errorbar(r_2, medians_2, yerr=sem_2, fmt="o", color="b")
+    ax.errorbar(r_1, plot_data1, yerr=sem_1, fmt="o", color="r")
+    ax.errorbar(r_2, plot_data2, yerr=sem_2, fmt="o", color="b")
 
     # Set custom tick labels
     ax.set_xticks(np.linspace(0, 2 * np.pi, len(roi_acronyms), endpoint=False))
@@ -1297,35 +1303,43 @@ def compute_centrality_and_test(
         label.set_rotation_mode("anchor")  # Optional: ensures proper rotation alignment
 
     # Calculate the maximum value across both datasets
-    max_value = max(max(medians_1 + sem_1), max(medians_2 + sem_2))
+    max_value = max(max(plot_data1 + sem_1), max(plot_data2 + sem_2))
+    max_value *= 1.1
 
     # Place stars for significant p-values just below the max value
     for region in range(N):
         if p_values[region] < 0.05:
             angle = r_1[
                 region
-            ]  # or r_2[region] depending on which dataset you are referencing
+            ]
             ax.text(
                 angle,
-                max_value + 0.1 * max_value,
+                max_value,
                 "*",
                 horizontalalignment="center",
                 verticalalignment="center",
                 fontsize=15,
                 color="black",
             )
+    
+    # Set the maximum radial value (rmax)
+    ax.set_rmax(max_value)
+    
+    # Set the radial ticks
+    max_r_ticks = 3
+    nearest_max_tick = np.ceil(max_value / 0.05) * 0.05 if "Eyes" not in condition \
+        else np.ceil(max_value / 0.005) * 0.005
+    r_ticks = np.linspace(0.0, nearest_max_tick, max_r_ticks)
+    ax.set_rticks(r_ticks)
 
     ax.set_rlabel_position(-30)  # Move radial labels away from plotted line
     ax.grid(True)
     ax.set_title(
-        f"{band_name.capitalize()} Band Betweenness Centrality",
+        f"{band_name.capitalize()} Band",
         va="bottom",
         fontsize=18,
         pad=10,
     )
-
-    # Position the legend at the bottom right with more spacing to the right
-    ax.legend(loc="lower right", bbox_to_anchor=(1.2, -0.2))
 
     plt.show()
     # return (
@@ -1358,6 +1372,7 @@ def plot_connectivity_circle(
     fig=None,
     subplot=None,
     colormap="YlGnBu",
+    set_title=True,
     title_prefix=None,
     save_fig=False,
     fontsize_names=None,
@@ -1450,7 +1465,7 @@ def plot_connectivity_circle(
         fontsize_title=15,
         vmin=vmin,
         vmax=vmax,
-        title=title_prefix,
+        title=title_prefix if set_title else None,
         fig=fig,
         subplot=subplot,
         show=True,
@@ -1784,6 +1799,7 @@ def plot_connectivity_and_stats(
                     functional_groupings_ids=functional_groupings_ids,
                     fontsize_names=13,
                     fontsize_colorbar=13,
+                    set_title=set_title,
                     title_prefix=f"{titles[data_idx]} Group",
                     save_fig=True,
                 )
@@ -1806,9 +1822,8 @@ def plot_connectivity_and_stats(
                         ha="right",
                     )
 
-                    if set_title:
-                        plt.title(f"{titles[data_idx]} Group",
-                                fontsize=18, pad=10)
+                    plt.title(f"{titles[data_idx]} Group",
+                            fontsize=18, pad=10)
                     plt.colorbar()
                     plt.show()
 
@@ -1829,13 +1844,11 @@ def plot_connectivity_and_stats(
                     ha="right",
                 )
 
-                if set_title:
-                    plt.title(
-                        f"{titles[data_idx]} | {condition} | {band}",
-                        fontsize=18,
-                        pad=10,
-                    )
-                # plt.colorbar()
+                plt.title(
+                    f"{titles[data_idx]} | {band.capitalize()} Band",
+                    fontsize=18,
+                    pad=10,
+                )
 
                 # Overlay values
                 for i in range(len(roi_acronyms)):

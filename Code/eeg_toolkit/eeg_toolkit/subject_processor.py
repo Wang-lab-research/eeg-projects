@@ -7,7 +7,7 @@ import mne
 from mne.time_frequency import tfr_array_morlet, AverageTFRArray
 from IPython.display import clear_output
 import seaborn as sns
-from typing import Dict, List
+from typing import Dict, List, Union
 
 sns.set(style="white", font_scale=1.5)
 
@@ -21,6 +21,14 @@ class Subject:
     def __str__(self):
         return f"Subject ID: {self.subject_id}, Response: {self.response}"
 
+class SubjectGroup:
+    def __init__(self, subjects: List[Subject]):
+        assert isinstance(subjects, list), "Input must be a list"
+        assert all([isinstance(el, Subject) for el in subjects]), "Input must be a list of Subjects"
+        self.subjects = subjects
+
+    def __str__(self):
+        return f"Subjects: {self.subjects}"
 
 class SubjectProcessor:
     def __init__(self, paths_dict: Dict[str, str], roi_acronyms: List[str]):
@@ -73,11 +81,21 @@ class SubjectProcessor:
 
         return epochs, stc_epo_array, stc_eo
 
-    def _compute_tfr(self, subject: Subject) -> AverageTFRArray:
-        epochs, stc_epo_array, stc_eo = self._load_complete_data(subject)
-        assert isinstance(stc_epo_array, np.ndarray), "Input must be an array"
-        assert isinstance(epochs, mne.epochs.EpochsFIF), "Input must be an Epochs object"
+    def _compute_tfr(self, subjects: Union[Subject, SubjectGroup]) -> AverageTFRArray:
+        assert (isinstance(subjects, Subject) or isinstance(subjects, SubjectGroup)), \
+            "Input must be an instance of Subject or SubjectGroup"
 
+        # # Collect epochs data for each subject
+        # if isinstance(subjects, SubjectGroup):
+        #     average_epochs_arrays = []
+        #     stc_epo_array_
+        #     for subject in subjects.subjects:                        
+        epochs, stc_epo_array, stc_eo = self._load_complete_data(subjects)
+        #         assert isinstance(stc_epo_array, np.ndarray), "Input must be an array"
+        #         assert isinstance(epochs, mne.epochs.EpochsFIF), "Input must be an Epochs object"
+        #         average_trace = np.mean(epochs.get_data(copy=False), axis=0)
+        #         average_epochs_arrays.append(average_trace)
+                
         # Define parameters for the TFR computation
         freqs = np.logspace(*np.log10([1, 100]), num=50)
         n_cycles = freqs / 2.0
@@ -107,12 +125,14 @@ class SubjectProcessor:
 
         return tfr
 
-    def plot_TFR_and_trace(self, subject: Subject, channel="Fp1", time_range=(-0.2, 0.8)):
-        tfr = self._compute_tfr(subject)
-        epochs, _, _ = self._load_complete_data(subject)
-        assert isinstance(tfr, AverageTFRArray), "Input must be an AverageTFRArray"
-        assert isinstance(epochs, mne.epochs.EpochsFIF), "Input must be an Epochs object"
+    def plot_TFR_and_trace(self, subjects: Union[Subject, SubjectGroup], channel="Fp1", 
+                           baseline=(-2.0, 0.0), time_range=(-0.2, 0.8)):
+        assert (isinstance(subjects, Subject) or isinstance(subjects, SubjectGroup)), \
+            "Input must be an instance of Subject or SubjectGroup"
 
+        tfr = self._compute_tfr(subjects)
+        epochs, _, _ = self._load_complete_data(subjects)
+        
         fig, axes = plt.subplots(6, 2, figsize=(12, 16), sharex=False, sharey=True)
         for i, roi in enumerate(self.roi_acronyms):
             col = i // 6
@@ -120,14 +140,15 @@ class SubjectProcessor:
             ax = axes[row, col]
             print(ax)
             tfr.plot(
-                baseline=(-2.5, 0.0),
+                baseline=baseline,
                 tmin=0.0,
                 tmax=1.0,
                 picks=roi,
                 mode="zscore",
-                title="Representative Chronic Pain Response to Mechanical Stimulus",
+                title="Time-Frequency Representation of Evoked Chronic Pain Response",
                 yscale="linear",
                 colorbar=True,
+                vlim=(-5,5),
                 cmap="turbo",
                 axes=ax,
                 show=False,
@@ -168,7 +189,6 @@ class SubjectProcessor:
         )
 
         # Select the channel to plot
-        channel = "Fp1"
         channel_index = epochs.info["ch_names"].index(channel)
 
         # Slice the average trace for the specified time range
@@ -183,8 +203,8 @@ class SubjectProcessor:
 
         plt.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
         plt.xlabel("Time (s)")
-        plt.ylabel("Amplitude (µV)")
-        plt.title(" Average Trace during Hand 256 mN Mechanical Stimulus")
+        plt.ylabel("Amplitude (V)")
+        plt.title("Grand Average of Evoked Chronic Pain Response")
         plt.tight_layout()
         plt.legend()
         plt.xlim(time_range)
