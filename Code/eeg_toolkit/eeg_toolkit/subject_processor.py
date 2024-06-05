@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import mne
 from mne.time_frequency import tfr_array_morlet, AverageTFRArray
-from IPython.display import clear_output
 import seaborn as sns
 from typing import Dict, List, Union
 
@@ -146,8 +145,9 @@ class SubjectProcessor:
 
         if len(epochs.info["ch_names"]) < 64:
             epochs = self._fill_nan_channels(epochs)
-        average_trace = np.nanmean(epochs.get_data(copy=False), axis=0)
-        return epochs, average_trace
+        evoked = np.nanmean(epochs.get_data(copy=False), axis=0)
+        sem = np.nanstd(epochs.get_data(copy=False), axis=0) / np.sqrt(len(epochs))
+        return epochs, evoked, sem
 
     def _load_stc_epochs(self, subject_id: str):
         print(f"Loading STC epochs for {subject_id}...")
@@ -162,7 +162,9 @@ class SubjectProcessor:
 
         print(f"Loaded {len(stim_labels)} evoked trials")
 
-        stc_epo_array = np.nanmean(stc_epo[stim_labels == 3], axis=0) # average over hand trials
+        stc_epo_array = np.nanmean(
+            stc_epo[stim_labels == 3], axis=0
+        )  # average over hand trials
 
         assert isinstance(stc_epo_array, np.ndarray), "Input must be an array"
         return stc_epo_array
@@ -180,40 +182,47 @@ class SubjectProcessor:
         elif isinstance(subjects, Subject):
             subjects_list = [subjects]
 
-        average_epochs_arrays = []
+        evoked_data_arrays = []
+        sem_epochs_per_sub = []
         stc_epo_arrays = []
-        stc_eos = []
+        stc_resting_arrays = []
         for subject in subjects_list:
             this_sub_id = subject.subject_id
-            epochs, average_trace = self._load_epochs(this_sub_id)
-            average_epochs_arrays.append(average_trace)
+            epochs, evoked, sem = self._load_epochs(this_sub_id)
+            evoked_data_arrays.append(evoked)
+            sem_epochs_per_sub.append(sem)
 
             stc_epo_array = self._load_stc_epochs(this_sub_id)
             stc_epo_arrays.append(stc_epo_array)
 
-            stc_eo = None
-            stc_eos.append(stc_eo)
+            stc_resting = None
+            stc_resting_arrays.append(stc_resting)
+
+        # combine data across subjects
         stc_epo_array = np.nanmean(np.array(stc_epo_arrays), axis=0)
         if stc_epo_array.ndim != 3:
             stc_epo_array = np.expand_dims(stc_epo_array, axis=0)
-        stc_eo = np.nanmean(np.array(stc_eos), axis=0) if stc_eo is not None else None
+        stc_resting = (
+            np.nanmean(np.array(stc_resting_arrays), axis=0)
+            if stc_resting is not None
+            else None
+        )
+        evoked_data_arrays = np.array(evoked_data_arrays)
+        sem_epochs_per_sub = np.array(sem_epochs_per_sub)
 
-        average_epochs_arrays = np.array(average_epochs_arrays)
-        for i in range(len(average_epochs_arrays)):
-            if average_epochs_arrays[i].shape != average_epochs_arrays[0].shape:
-                raise ValueError(
-                    f"Epoch array {i} has different shape than others"
-                )
-        average_epoch_data = np.nanmean(average_epochs_arrays, axis=0)
-
-        return epochs, average_epoch_data, stc_epo_array, stc_eo
+        return (
+            epochs,
+            evoked_data_arrays,
+            sem_epochs_per_sub,
+            stc_epo_array,
+            stc_resting,
+        )
 
     def _compute_tfr(self, subjects: Union[Subject, SubjectGroup]) -> AverageTFRArray:
         assert isinstance(subjects, Subject) or isinstance(
             subjects, SubjectGroup
         ), "Input must be an instance of Subject or SubjectGroup"
-        epochs, _, stc_epo_array, stc_eo = self._load_complete_data(subjects)
-        print(epochs.info["ch_names"])
+        epochs, _, _, stc_epo_array, stc_resting = self._load_complete_data(subjects)
 
         freqs = np.logspace(*np.log10([1, 100]), num=50)
         n_cycles = freqs / 2.0
@@ -265,38 +274,66 @@ class SubjectProcessor:
             if i > 0:
                 ax.set_ylabel("")
 
-        clear_output(wait=True)
+        # clear_output(wait=True)
         fig.tight_layout()
         plt.show()
 
-    def _plot_trace(self, epochs, average_epoch_data, channel: str, time_range: tuple):
-        if isinstance(average_epoch_data, np.ndarray):
-            average_trace = average_epoch_data
-        else:
-            average_trace = np.nanmean(epochs.get_data(copy=False), axis=0)
+    def _plot_trace(
+        self,
+        epochs,
+        evoked_data_arrays,
+        sem_epochs_per_sub,
+        channel: str,
+        time_range: tuple,
+    ):
+        # Print the type of evoked_data_arrays
+        print(f"Type of evoked_data_arrays: {type(evoked_data_arrays)}")
+
+        evoked_averaged = np.nanmean(evoked_data_arrays, axis=0)
+        sem_averaged = np.nanmean(sem_epochs_per_sub, axis=0)
+        print(f"Average trace shape: {evoked_averaged.shape}")
+        print(f"SEM shape: {sem_averaged.shape}")
 
         sfreq = self.sfreq
-        total_duration = average_trace.shape[1] / sfreq
+        total_duration = evoked_averaged.shape[1] / sfreq
         time_min = -total_duration / 2
 
         sample_start = int((time_range[0] - time_min) * sfreq)
         sample_end = int((time_range[1] - time_min) * sfreq)
 
         sample_start = max(sample_start, 0)
-        sample_end = min(sample_end, average_trace.shape[1])
+        sample_end = min(sample_end, evoked_averaged.shape[1])
 
         timepoints = np.linspace(
             time_range[0], time_range[1], sample_end - sample_start
         )
 
-        channel_index = epochs.info["ch_names"].index(channel)
-        average_trace = average_trace[channel_index, sample_start:sample_end] * 1e6
-
-        plt.figure(figsize=(8, 4))
+        # Find the index of the channel
+        channel_index = (
+            epochs.info["ch_names"].index(channel)
+            if channel in epochs.info["ch_names"]
+            else epochs.info["ch_names"].index(f"{channel.upper()}")
+        )
+        
+        # Get data within the time range
+        evoked_averaged = evoked_averaged[channel_index, sample_start:sample_end] * 1e7
+        sem_averaged = sem_averaged[channel_index, sample_start:sample_end] * 1e7
+        
+        plt.figure(figsize=(10, 5))
         plt.plot(
             timepoints,
-            average_trace,
+            evoked_averaged,
             label=f"Channel {channel}",
+        )
+
+        # Plot SEM as shaded area
+        plt.fill_between(
+            timepoints,
+            evoked_averaged - sem_averaged,
+            evoked_averaged + sem_averaged,
+            color="b",
+            alpha=0.2,
+            label="SEM",
         )
 
         plt.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
@@ -320,7 +357,10 @@ class SubjectProcessor:
         ), "Input must be an instance of Subject or SubjectGroup"
 
         tfr = self._compute_tfr(subjects)
-        epochs, average_epoch_data, _, stc_eo = self._load_complete_data(subjects)
+
+        epochs, evoked_data_arrays, sem_epochs_per_sub, stc_epo_array, stc_resting = (
+            self._load_complete_data(subjects)
+        )
 
         title = (
             "Time-Frequency Representation of Evoked Chronic Pain Response"
@@ -329,7 +369,9 @@ class SubjectProcessor:
         )
 
         self._plot_tfr(tfr, baseline, title)
-        self._plot_trace(epochs, average_epoch_data, channel, time_range)
+        self._plot_trace(
+            epochs, evoked_data_arrays, sem_epochs_per_sub, channel, time_range
+        )
 
     def _get_user_response(self) -> str:
         response = input(
@@ -354,7 +396,7 @@ class SubjectProcessor:
             self.maybe_list.append(subject.subject_id)
             subject.response = "maybe"
 
-        clear_output(wait=True)
+        # clear_output(wait=True)
 
     def display_results(self):
         print("Yes List:", self.yes_list)
