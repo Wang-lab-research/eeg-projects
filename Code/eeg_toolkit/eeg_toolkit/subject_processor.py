@@ -50,6 +50,79 @@ class SubjectProcessor:
         self.sfreq = 400  # Hz
         self.roi_acronyms = roi_acronyms
 
+    def _fill_nan_channels(self, epochs):
+        ch_names = [
+            "Fp1",
+            "Fpz",
+            "Fp2",
+            "AF3",
+            "AF4",
+            "F11",
+            "F7",
+            "F5",
+            "F3",
+            "F1",
+            "Fz",
+            "F2",
+            "F4",
+            "F6",
+            "F8",
+            "F12",
+            "FT11",
+            "FC5",
+            "FC3",
+            "FC1",
+            "FCz",
+            "FC2",
+            "FC4",
+            "FC6",
+            "FT12",
+            "T7",
+            "C5",
+            "C3",
+            "C1",
+            "Cz",
+            "C2",
+            "C4",
+            "C6",
+            "T8",
+            "TP7",
+            "CP5",
+            "CP3",
+            "CP1",
+            "CPz",
+            "CP2",
+            "CP4",
+            "CP6",
+            "TP8",
+            "M1",
+            "M2",
+            "P7",
+            "P5",
+            "P3",
+            "P1",
+            "Pz",
+            "P2",
+            "P4",
+            "P6",
+            "P8",
+            "PO7",
+            "PO3",
+            "POz",
+            "PO4",
+            "PO8",
+            "O1",
+            "Oz",
+            "O2",
+            "Cb1",
+            "Cb2",
+        ]
+        remaining_ch_names = epochs.info["ch_names"]
+        missing_ch_names = list(set(ch_names) - set(remaining_ch_names))
+        epochs.info["bads"].extend(missing_ch_names)
+        epochs.interpolate_bads(reset_bads=True)
+        return epochs
+
     def _load_epochs(self, subject_id: str):
         print(f"\nLoading Epochs for {subject_id}...")
         epo_fname = glob(f"{self.processed_data_path}/{subject_id}*epo.fif")[0]
@@ -58,6 +131,9 @@ class SubjectProcessor:
         assert isinstance(
             epochs, mne.epochs.EpochsFIF
         ), "Input must be an Epochs object"
+
+        if len(epochs.info["ch_names"]) < 64:
+            epochs = self._fill_nan_channels(epochs)
         average_trace = np.mean(epochs.get_data(copy=False), axis=0)
         return epochs, average_trace
 
@@ -73,7 +149,7 @@ class SubjectProcessor:
         stim_labels = sio.loadmat(stim_fname)["stim_labels"][0]
 
         print(f"Loaded {len(stim_labels)} evoked trials")
-        
+
         # Select just hand 256 mN condition (label=3)
         stc_epo_array = stc_epo[stim_labels == 3]
         assert isinstance(stc_epo_array, np.ndarray), "Input must be an array"
@@ -106,7 +182,9 @@ class SubjectProcessor:
             stc_eo = None
             stc_eos.append(stc_eo)
 
-        average_epoch_data = np.mean(np.array(average_epochs_arrays), axis=0)
+        # average_epochs_arrays = np.array(average_epochs_arrays)
+        print([el.shape for el in average_epochs_arrays])
+        average_epoch_data = np.mean(average_epochs_arrays, axis=0)
         stc_epo_array = np.mean(np.array(stc_epo_arrays), axis=0)
         stc_eo = np.mean(np.array(stc_eos), axis=0) if stc_eo is not None else None
 
@@ -117,6 +195,7 @@ class SubjectProcessor:
             subjects, SubjectGroup
         ), "Input must be an instance of Subject or SubjectGroup"
         epochs, _, stc_epo_array, stc_eo = self._load_complete_data(subjects)
+        print(epochs.info["ch_names"])
 
         freqs = np.logspace(*np.log10([1, 100]), num=50)
         n_cycles = freqs / 2.0
@@ -193,7 +272,7 @@ class SubjectProcessor:
         )
 
         channel_index = epochs.info["ch_names"].index(channel)
-        average_trace = average_trace[channel_index, sample_start:sample_end]*1e6
+        average_trace = average_trace[channel_index, sample_start:sample_end] * 1e6
 
         plt.figure(figsize=(8, 4))
         plt.plot(
