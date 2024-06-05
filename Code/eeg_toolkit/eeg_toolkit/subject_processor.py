@@ -51,7 +51,8 @@ class SubjectProcessor:
         self.roi_acronyms = roi_acronyms
 
     def _fill_nan_channels(self, epochs):
-        ch_names = [
+        incomplete_ch_names = epochs.info["ch_names"]
+        complete_ch_names = [
             "Fp1",
             "Fpz",
             "Fp2",
@@ -117,10 +118,21 @@ class SubjectProcessor:
             "Cb1",
             "Cb2",
         ]
-        remaining_ch_names = epochs.info["ch_names"]
-        missing_ch_names = list(set(ch_names) - set(remaining_ch_names))
-        epochs.info["bads"].extend(missing_ch_names)
-        epochs.interpolate_bads(reset_bads=True)
+        complete_ch_names = [ch_name.upper() for ch_name in complete_ch_names]
+        missing_ch_ids = [
+            i
+            for i in range(len(complete_ch_names))
+            if complete_ch_names[i] not in incomplete_ch_names
+        ]
+
+        data = epochs.get_data(copy=False)
+        data = np.insert(data, missing_ch_ids, np.nan, axis=1)
+
+        info = mne.create_info(
+            ch_names=complete_ch_names, sfreq=self.sfreq, ch_types="eeg"
+        )
+
+        epochs = mne.EpochsArray(data, info)
         return epochs
 
     def _load_epochs(self, subject_id: str):
@@ -134,7 +146,7 @@ class SubjectProcessor:
 
         if len(epochs.info["ch_names"]) < 64:
             epochs = self._fill_nan_channels(epochs)
-        average_trace = np.mean(epochs.get_data(copy=False), axis=0)
+        average_trace = np.nanmean(epochs.get_data(copy=False), axis=0)
         return epochs, average_trace
 
     def _load_stc_epochs(self, subject_id: str):
@@ -150,8 +162,8 @@ class SubjectProcessor:
 
         print(f"Loaded {len(stim_labels)} evoked trials")
 
-        # Select just hand 256 mN condition (label=3)
-        stc_epo_array = stc_epo[stim_labels == 3]
+        stc_epo_array = np.nanmean(stc_epo[stim_labels == 3], axis=0) # average over hand trials
+
         assert isinstance(stc_epo_array, np.ndarray), "Input must be an array"
         return stc_epo_array
 
@@ -181,12 +193,18 @@ class SubjectProcessor:
 
             stc_eo = None
             stc_eos.append(stc_eo)
+        stc_epo_array = np.nanmean(np.array(stc_epo_arrays), axis=0)
+        if stc_epo_array.ndim != 3:
+            stc_epo_array = np.expand_dims(stc_epo_array, axis=0)
+        stc_eo = np.nanmean(np.array(stc_eos), axis=0) if stc_eo is not None else None
 
-        # average_epochs_arrays = np.array(average_epochs_arrays)
-        print([el.shape for el in average_epochs_arrays])
-        average_epoch_data = np.mean(average_epochs_arrays, axis=0)
-        stc_epo_array = np.mean(np.array(stc_epo_arrays), axis=0)
-        stc_eo = np.mean(np.array(stc_eos), axis=0) if stc_eo is not None else None
+        average_epochs_arrays = np.array(average_epochs_arrays)
+        for i in range(len(average_epochs_arrays)):
+            if average_epochs_arrays[i].shape != average_epochs_arrays[0].shape:
+                raise ValueError(
+                    f"Epoch array {i} has different shape than others"
+                )
+        average_epoch_data = np.nanmean(average_epochs_arrays, axis=0)
 
         return epochs, average_epoch_data, stc_epo_array, stc_eo
 
@@ -255,7 +273,7 @@ class SubjectProcessor:
         if isinstance(average_epoch_data, np.ndarray):
             average_trace = average_epoch_data
         else:
-            average_trace = np.mean(epochs.get_data(copy=False), axis=0)
+            average_trace = np.nanmean(epochs.get_data(copy=False), axis=0)
 
         sfreq = self.sfreq
         total_duration = average_trace.shape[1] / sfreq

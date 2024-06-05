@@ -590,8 +590,9 @@ def compute_sub_avg_con(
                     reduced_data = reduce_connectivity_matrix(
                         data, functional_groupings_ids, method=func_grp_method
                     )
+                    data = reduced_data
                 top_connections, strength = get_top_connections(
-                    reduced_data, method, roi_acronyms, n_top=3
+                    data, method, roi_acronyms, n_top=3
                 )
                 sub_con_dict[condition][method][band_name]["top 3"] = top_connections
 
