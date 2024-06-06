@@ -220,7 +220,6 @@ class SubjectProcessor:
         print(f"\nLoading Epochs for {subject_id}...")
         epo_fname = glob(f"{self.processed_data_path}/{subject_id}*epo.fif")[0]
         epochs = mne.read_epochs(epo_fname)
-        print(f"Loaded {len(epochs)} epochs")
         assert isinstance(
             epochs, mne.epochs.EpochsFIF
         ), "Input must be an Epochs object"
@@ -242,7 +241,8 @@ class SubjectProcessor:
         stim_fname = glob(f"{self.processed_data_path}/{subject_id}*stim_labels.mat")[0]
         stim_labels = sio.loadmat(stim_fname)["stim_labels"][0]
 
-        print(f"Loaded {len(stim_labels)} evoked trials")
+        print(f"Loaded {len(stim_labels)} stimulus labels")
+        print(f"{sum(stim_labels == 3)} hand trials (out of {len(stim_labels)})")
 
         stc_epo_array = np.nanmean(
             stc_epo[stim_labels == 3], axis=0
@@ -261,6 +261,8 @@ class SubjectProcessor:
 
         if isinstance(subjects, SubjectGroup):
             subjects_list = [subject for subject in subjects.subjects]
+            print(f"Loading data for {len(subjects_list)} subjects...")
+            print(f"Subjects: {[subject.subject_id for subject in subjects_list]}")
         elif isinstance(subjects, Subject):
             subjects_list = [subjects]
 
@@ -363,7 +365,6 @@ class SubjectProcessor:
             # add stimulus onset line
             ax.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
 
-        clear_output(wait=True)
         fig.tight_layout()
         plt.show()
 
@@ -456,7 +457,12 @@ class SubjectProcessor:
 
         self._plot_tfr(tfr, baseline, title, time_range, vlim)
         self._plot_trace(
-            subjects, epochs, evoked_data_arrays, sem_epochs_per_sub, channel, time_range
+            subjects,
+            epochs,
+            evoked_data_arrays,
+            sem_epochs_per_sub,
+            channel,
+            time_range,
         )
 
         return tfr, evoked_data_arrays
