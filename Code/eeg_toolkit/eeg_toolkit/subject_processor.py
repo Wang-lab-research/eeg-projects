@@ -7,6 +7,7 @@ import mne
 from mne.time_frequency import tfr_array_morlet, AverageTFRArray
 import seaborn as sns
 from typing import Dict, List, Union
+from IPython.display import clear_output
 
 sns.set(style="white", font_scale=1.5)
 
@@ -17,8 +18,89 @@ class Subject:
         self.subject_id = subject_id
         self.response = None
 
+        sub_ids = {
+            "CP": [
+                "018",
+                "022",
+                "024",
+                "031",
+                "032",
+                "034",
+                "036",
+                "039",
+                "040",
+                "045",
+                "046",
+                "052",
+                "020",
+                "021",
+                "023",
+                "029",
+                "037",
+                "041",
+                "042",
+                "044",
+                "048",
+                "049",
+                "050",
+                "056",
+            ],
+            "HC": [
+                "C10",
+                "C11",
+                "C12",
+                "C13",
+                "C14",
+                "C15",
+                "C16",
+                "C17",
+                "C18",
+                "C19",
+                "C2.",
+                "C24",
+                "C25",
+                "C26",
+                "C27",
+                "C3.",
+                "C6.",
+                "C7.",
+                "C9.",
+            ],
+            "WSP": [
+                "018",
+                "022",
+                "024",
+                "031",
+                "032",
+                "034",
+                "036",
+                "039",
+                "040",
+                "045",
+                "046",
+                "052",
+            ],
+            "LP": [
+                "020",
+                "021",
+                "023",
+                "029",
+                "044",
+                "037",
+                "041",
+                "042",
+                "048",
+                "049",
+                "050",
+                "056",
+            ],
+        }
+
+        # Assign group from sub_ids dict keys if sub_id is in any of the keys
+        self.group = next((key for key in sub_ids if subject_id in sub_ids[key]), None)
+
     def __str__(self):
-        return f"Subject ID: {self.subject_id}, Response: {self.response}"
+        return f"Subject ID: {self.subject_id}, Group: {self.group}, Response: {self.response}"
 
 
 class SubjectGroup:
@@ -219,9 +301,6 @@ class SubjectProcessor:
         )
 
     def _compute_tfr(self, subjects: Union[Subject, SubjectGroup]) -> AverageTFRArray:
-        assert isinstance(subjects, Subject) or isinstance(
-            subjects, SubjectGroup
-        ), "Input must be an instance of Subject or SubjectGroup"
         epochs, _, _, stc_epo_array, stc_resting = self._load_complete_data(subjects)
 
         freqs = np.logspace(*np.log10([1, 100]), num=50)
@@ -250,7 +329,14 @@ class SubjectProcessor:
 
         return tfr
 
-    def _plot_tfr(self, tfr: AverageTFRArray, baseline: tuple, title: str):
+    def _plot_tfr(
+        self,
+        tfr: AverageTFRArray,
+        baseline: tuple,
+        title: str,
+        time_range: tuple = (-0.2, 0.8),
+        vlim: tuple = (None, None),
+    ):
         fig, axes = plt.subplots(6, 2, figsize=(12, 16), sharex=False, sharey=True)
         for i, roi in enumerate(self.roi_acronyms):
             col = i // 6
@@ -258,14 +344,14 @@ class SubjectProcessor:
             ax = axes[row, col]
             tfr.plot(
                 baseline=baseline,
-                tmin=0.0,
-                tmax=1.0,
+                tmin=time_range[0],
+                tmax=time_range[1],
                 picks=roi,
                 mode="zscore",
                 title=title,
                 yscale="linear",
                 colorbar=True,
-                vlim=(-5, 5),
+                vlim=vlim,
                 cmap="turbo",
                 axes=ax,
                 show=False,
@@ -274,25 +360,24 @@ class SubjectProcessor:
             if i > 0:
                 ax.set_ylabel("")
 
-        # clear_output(wait=True)
+            # add stimulus onset line
+            ax.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
+
+        clear_output(wait=True)
         fig.tight_layout()
         plt.show()
 
     def _plot_trace(
         self,
+        subjects: Union[Subject, SubjectGroup],
         epochs,
         evoked_data_arrays,
         sem_epochs_per_sub,
         channel: str,
         time_range: tuple,
     ):
-        # Print the type of evoked_data_arrays
-        print(f"Type of evoked_data_arrays: {type(evoked_data_arrays)}")
-
         evoked_averaged = np.nanmean(evoked_data_arrays, axis=0)
         sem_averaged = np.nanmean(sem_epochs_per_sub, axis=0)
-        print(f"Average trace shape: {evoked_averaged.shape}")
-        print(f"SEM shape: {sem_averaged.shape}")
 
         sfreq = self.sfreq
         total_duration = evoked_averaged.shape[1] / sfreq
@@ -314,11 +399,11 @@ class SubjectProcessor:
             if channel in epochs.info["ch_names"]
             else epochs.info["ch_names"].index(f"{channel.upper()}")
         )
-        
+
         # Get data within the time range
         evoked_averaged = evoked_averaged[channel_index, sample_start:sample_end] * 1e7
         sem_averaged = sem_averaged[channel_index, sample_start:sample_end] * 1e7
-        
+
         plt.figure(figsize=(10, 5))
         plt.plot(
             timepoints,
@@ -339,7 +424,11 @@ class SubjectProcessor:
         plt.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
         plt.xlabel("Time (s)")
         plt.ylabel("Amplitude (µV)")
-        plt.title("Grand Average of Evoked Chronic Pain Response")
+        plt.title(
+            f"Grand Average of Evoked Response ({subjects.group})"
+            if isinstance(subjects, Subject)
+            else f"Grand Average of Group-Averaged Evoked Response ({subjects.subjects[0].group})"
+        )
         plt.tight_layout()
         plt.legend()
         plt.xlim(time_range)
@@ -351,11 +440,8 @@ class SubjectProcessor:
         channel="Fp1",
         baseline=(-2.5, 0.0),
         time_range=(-0.2, 0.8),
+        vlim=None,
     ):
-        assert isinstance(subjects, Subject) or isinstance(
-            subjects, SubjectGroup
-        ), "Input must be an instance of Subject or SubjectGroup"
-
         tfr = self._compute_tfr(subjects)
 
         epochs, evoked_data_arrays, sem_epochs_per_sub, stc_epo_array, stc_resting = (
@@ -363,15 +449,17 @@ class SubjectProcessor:
         )
 
         title = (
-            "Time-Frequency Representation of Evoked Chronic Pain Response"
+            f"Time-Frequency Representation of Evoked  Response ({subjects.group})"
             if isinstance(subjects, Subject)
-            else "Time-Frequency Representation of Group-Averaged Evoked Chronic Pain Response"
+            else f"Time-Frequency Representation of Group-Averaged Evoked Chronic Pain Response ({subjects.subjects[0].group})"
         )
 
-        self._plot_tfr(tfr, baseline, title)
+        self._plot_tfr(tfr, baseline, title, time_range, vlim)
         self._plot_trace(
-            epochs, evoked_data_arrays, sem_epochs_per_sub, channel, time_range
+            subjects, epochs, evoked_data_arrays, sem_epochs_per_sub, channel, time_range
         )
+
+        return tfr, evoked_data_arrays
 
     def _get_user_response(self) -> str:
         response = input(
@@ -396,7 +484,7 @@ class SubjectProcessor:
             self.maybe_list.append(subject.subject_id)
             subject.response = "maybe"
 
-        # clear_output(wait=True)
+        clear_output(wait=True)
 
     def display_results(self):
         print("Yes List:", self.yes_list)
