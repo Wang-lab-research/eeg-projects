@@ -590,8 +590,9 @@ def compute_sub_avg_con(
                     reduced_data = reduce_connectivity_matrix(
                         data, functional_groupings_ids, method=func_grp_method
                     )
+                    data = reduced_data
                 top_connections, strength = get_top_connections(
-                    reduced_data, method, roi_acronyms, n_top=3
+                    data, method, roi_acronyms, n_top=3
                 )
                 sub_con_dict[condition][method][band_name]["top 3"] = top_connections
 
@@ -1270,22 +1271,28 @@ def compute_centrality_and_test(
         mean_sem_1 = f"{np.round(means_1[region],3)} ± {np.round(sem_1[region],3)}"
         mean_sem_2 = f"{np.round(means_2[region],3)} ± {np.round(sem_2[region],3)}"
         table.append([roi_name, p_val, mean_sem_1, mean_sem_2])
+        
+    
     print(tabulate(table, headers=header, tablefmt="pretty"))
 
     # Apply Seaborn style
     sns.set(style="whitegrid", font_scale=1.2)
+    
+    # Get data for plotting
+    plot_data1 = means_1
+    plot_data2 = means_2
 
     # Plot betweenness centrality on polar plot
-    r_1 = np.linspace(0, 2 * np.pi, len(medians_1), endpoint=False)
-    r_2 = np.linspace(0, 2 * np.pi, len(medians_2), endpoint=False)
+    r_1 = np.linspace(0, 2 * np.pi, len(plot_data1), endpoint=False)
+    r_2 = np.linspace(0, 2 * np.pi, len(plot_data2), endpoint=False)
 
     fig, ax = plt.subplots(subplot_kw={"projection": "polar"}, figsize=(6, 6))
-    ax.plot(r_1, medians_1, color="r", label=f"{group_names[0].title()} Group")
-    ax.plot(r_2, medians_2, color="b", label=f"{group_names[1].title()} Group")
+    ax.plot(r_1, plot_data1, color="r", label=f"{group_names[0].title()} Group")
+    ax.plot(r_2, plot_data2, color="b", label=f"{group_names[1].title()} Group")
 
     # Add error bars for standard error of the mean
-    ax.errorbar(r_1, medians_1, yerr=sem_1, fmt="o", color="r")
-    ax.errorbar(r_2, medians_2, yerr=sem_2, fmt="o", color="b")
+    ax.errorbar(r_1, plot_data1, yerr=sem_1, fmt="o", color="r")
+    ax.errorbar(r_2, plot_data2, yerr=sem_2, fmt="o", color="b")
 
     # Set custom tick labels
     ax.set_xticks(np.linspace(0, 2 * np.pi, len(roi_acronyms), endpoint=False))
@@ -1297,35 +1304,43 @@ def compute_centrality_and_test(
         label.set_rotation_mode("anchor")  # Optional: ensures proper rotation alignment
 
     # Calculate the maximum value across both datasets
-    max_value = max(max(medians_1 + sem_1), max(medians_2 + sem_2))
+    max_value = max(max(plot_data1 + sem_1), max(plot_data2 + sem_2))
+    max_value *= 1.1
 
     # Place stars for significant p-values just below the max value
     for region in range(N):
         if p_values[region] < 0.05:
             angle = r_1[
                 region
-            ]  # or r_2[region] depending on which dataset you are referencing
+            ]
             ax.text(
                 angle,
-                max_value + 0.1 * max_value,
+                max_value,
                 "*",
                 horizontalalignment="center",
                 verticalalignment="center",
                 fontsize=15,
                 color="black",
             )
+    
+    # Set the maximum radial value (rmax)
+    ax.set_rmax(max_value)
+    
+    # Set the radial ticks
+    max_r_ticks = 3
+    nearest_max_tick = np.ceil(max_value / 0.05) * 0.05 if "Eyes" not in condition \
+        else np.ceil(max_value / 0.005) * 0.005
+    r_ticks = np.linspace(0.0, nearest_max_tick, max_r_ticks)
+    ax.set_rticks(r_ticks)
 
     ax.set_rlabel_position(-30)  # Move radial labels away from plotted line
     ax.grid(True)
     ax.set_title(
-        f"{band_name.capitalize()} Band Betweenness Centrality",
+        f"{band_name.capitalize()} Band",
         va="bottom",
         fontsize=18,
         pad=10,
     )
-
-    # Position the legend at the bottom right with more spacing to the right
-    ax.legend(loc="lower right", bbox_to_anchor=(1.2, -0.2))
 
     plt.show()
     # return (
@@ -1351,13 +1366,14 @@ def plot_connectivity_circle(
     condition,
     save_path,
     functional_groupings=None,
-    functional_group_ids=None,
+    functional_groupings_ids=None,
     func_grp_method=None,
     vmin=None,
     vmax=None,
     fig=None,
     subplot=None,
     colormap="YlGnBu",
+    set_title=True,
     title_prefix=None,
     save_fig=False,
     fontsize_names=None,
@@ -1387,8 +1403,14 @@ def plot_connectivity_circle(
         for roi in roi_names
     ]
 
-    # read colors
-    node_colors = [label.color for label in labels]
+    # set custom colors
+    if functional_groupings is None:
+        node_colors = ["#0b7014","#951ab0","#8aedba","#261ab0","#477ed1","#bd6fed"]*2
+    else: 
+        node_colors = ["#261ab0","#261ab0",
+                       "#bd6fed","#bd6fed",
+                       "#8aedba","#8aedba",]
+        
     # read functional groupings
     if functional_groupings is not None:
         node_colors = node_colors[: len(functional_groupings)]
@@ -1444,7 +1466,7 @@ def plot_connectivity_circle(
         fontsize_title=15,
         vmin=vmin,
         vmax=vmax,
-        title=title_prefix,
+        title=title_prefix if set_title else None,
         fig=fig,
         subplot=subplot,
         show=True,
@@ -1762,46 +1784,49 @@ def plot_connectivity_and_stats(
         # Plot circle for FC values, and connectivity matrix just for p-values
         if not isindividual:
             if data_idx != pval_pos:
-                if functional_groupings is None:
-                    # Plot connectivity circle
-                    plot_connectivity_circle(
-                        data=data,
-                        method=method,
-                        band=band,
-                        roi_names=roi_names,
-                        roi_acronyms=roi_acronyms,
-                        condition=condition,
-                        save_path=save_path,
-                        colormap=colormap,
-                        vmin=vmin,
-                        vmax=vmax,
-                        fontsize_names=13,
-                        fontsize_colorbar=13,
-                        title_prefix=f"{titles[data_idx]} Group",
-                        save_fig=True,
-                    )
-                
-                # Plot connectivity matrix
-                plt.figure(figsize=(10, 7), facecolor="white")
-                plt.imshow(data, vmin=vmin, vmax=vmax, cmap="viridis")
-                plt.grid(False)
-
-                plt.ylabel("Regions", labelpad=20)
-                plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
-
-                plt.xlabel("Regions", labelpad=20)
-                plt.xticks(
-                    range(len(roi_acronyms)),
-                    labels=roi_acronyms,
-                    rotation=45,
-                    ha="right",
+                # Plot connectivity circle
+                plot_connectivity_circle(
+                    data=data,
+                    method=method,
+                    band=band,
+                    roi_names=roi_names,
+                    roi_acronyms=roi_acronyms,
+                    condition=condition,
+                    save_path=save_path,
+                    colormap=colormap,
+                    vmin=vmin,
+                    vmax=vmax,
+                    functional_groupings=functional_groupings,
+                    functional_groupings_ids=functional_groupings_ids,
+                    fontsize_names=13,
+                    fontsize_colorbar=13,
+                    set_title=set_title,
+                    title_prefix=f"{titles[data_idx]} Group",
+                    save_fig=True,
                 )
+                
+                plot_matrix=False
+                if plot_matrix:    
+                    # Plot connectivity matrix
+                    plt.figure(figsize=(10, 7), facecolor="white")
+                    plt.imshow(data, vmin=vmin, vmax=vmax, cmap="viridis")
+                    plt.grid(False)
 
-                if set_title:
+                    plt.ylabel("Regions", labelpad=20)
+                    plt.yticks(range(len(roi_acronyms)), labels=roi_acronyms)
+
+                    plt.xlabel("Regions", labelpad=20)
+                    plt.xticks(
+                        range(len(roi_acronyms)),
+                        labels=roi_acronyms,
+                        rotation=45,
+                        ha="right",
+                    )
+
                     plt.title(f"{titles[data_idx]} Group",
-                              fontsize=18, pad=10)
-                plt.colorbar()
-                plt.show()
+                            fontsize=18, pad=10)
+                    plt.colorbar()
+                    plt.show()
 
             elif data_idx == pval_pos:
                 # Plot connectivity matrix (p-values)
@@ -1820,13 +1845,11 @@ def plot_connectivity_and_stats(
                     ha="right",
                 )
 
-                if set_title:
-                    plt.title(
-                        f"{titles[data_idx]} | {condition} | {band}",
-                        fontsize=18,
-                        pad=10,
-                    )
-                # plt.colorbar()
+                plt.title(
+                    f"{titles[data_idx]} | {band.capitalize()} Band",
+                    fontsize=18,
+                    pad=10,
+                )
 
                 # Overlay values
                 for i in range(len(roi_acronyms)):
