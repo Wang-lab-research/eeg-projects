@@ -452,7 +452,7 @@ class SubjectProcessor:
         title = (
             f"Time-Frequency Representation of Evoked  Response ({subjects.group})"
             if isinstance(subjects, Subject)
-            else f"Time-Frequency Representation of Group-Averaged Evoked Chronic Pain Response ({subjects.subjects[0].group})"
+            else f"Time-Frequency Representation of Group-Averaged Evoked Response ({subjects.subjects[0].group})"
         )
 
         self._plot_tfr(tfr, baseline, title, time_range, vlim)
