@@ -4,9 +4,11 @@ import scipy.io as sio
 import numpy as np
 import matplotlib.pyplot as plt
 import mne
+import os
 from mne.time_frequency import tfr_array_morlet, AverageTFRArray
 import seaborn as sns
 from typing import Dict, List, Union
+from IPython.display import clear_output
 
 sns.set(style="white", font_scale=1.5)
 
@@ -17,8 +19,89 @@ class Subject:
         self.subject_id = subject_id
         self.response = None
 
+        sub_ids = {
+            "CP": [
+                "018",
+                "022",
+                "024",
+                "031",
+                "032",
+                "034",
+                "036",
+                "039",
+                "040",
+                "045",
+                "046",
+                "052",
+                "020",
+                "021",
+                "023",
+                "029",
+                "037",
+                "041",
+                "042",
+                "044",
+                "048",
+                "049",
+                "050",
+                "056",
+            ],
+            "HC": [
+                "C10",
+                "C11",
+                "C12",
+                "C13",
+                "C14",
+                "C15",
+                "C16",
+                "C17",
+                "C18",
+                "C19",
+                "C2.",
+                "C24",
+                "C25",
+                "C26",
+                "C27",
+                "C3.",
+                "C6.",
+                "C7.",
+                "C9.",
+            ],
+            "WSP": [
+                "018",
+                "022",
+                "024",
+                "031",
+                "032",
+                "034",
+                "036",
+                "039",
+                "040",
+                "045",
+                "046",
+                "052",
+            ],
+            "LP": [
+                "020",
+                "021",
+                "023",
+                "029",
+                "044",
+                "037",
+                "041",
+                "042",
+                "048",
+                "049",
+                "050",
+                "056",
+            ],
+        }
+
+        # Assign group from sub_ids dict keys if sub_id is in any of the keys
+        self.group = next((key for key in sub_ids if subject_id in sub_ids[key]), None)
+
     def __str__(self):
-        return f"Subject ID: {self.subject_id}, Response: {self.response}"
+        return f"Subject ID: {self.subject_id}, Group: {self.group}, Response: {self.response}"
 
 
 class SubjectGroup:
@@ -28,6 +111,7 @@ class SubjectGroup:
             [isinstance(el, Subject) for el in subjects]
         ), "Input must be a list of Subjects"
         self.subjects = subjects
+        self.group = subjects[0].group
 
     def __str__(self):
         return f"Subjects: {self.subjects}"
@@ -138,7 +222,6 @@ class SubjectProcessor:
         print(f"\nLoading Epochs for {subject_id}...")
         epo_fname = glob(f"{self.processed_data_path}/{subject_id}*epo.fif")[0]
         epochs = mne.read_epochs(epo_fname)
-        print(f"Loaded {len(epochs)} epochs")
         assert isinstance(
             epochs, mne.epochs.EpochsFIF
         ), "Input must be an Epochs object"
@@ -160,7 +243,8 @@ class SubjectProcessor:
         stim_fname = glob(f"{self.processed_data_path}/{subject_id}*stim_labels.mat")[0]
         stim_labels = sio.loadmat(stim_fname)["stim_labels"][0]
 
-        print(f"Loaded {len(stim_labels)} evoked trials")
+        print(f"Loaded {len(stim_labels)} stimulus labels")
+        print(f"{sum(stim_labels == 3)} hand trials (out of {len(stim_labels)})")
 
         stc_epo_array = np.nanmean(
             stc_epo[stim_labels == 3], axis=0
@@ -179,6 +263,8 @@ class SubjectProcessor:
 
         if isinstance(subjects, SubjectGroup):
             subjects_list = [subject for subject in subjects.subjects]
+            print(f"Loading data for {len(subjects_list)} subjects...")
+            print(f"Subjects: {[subject.subject_id for subject in subjects_list]}")
         elif isinstance(subjects, Subject):
             subjects_list = [subjects]
 
@@ -219,9 +305,6 @@ class SubjectProcessor:
         )
 
     def _compute_tfr(self, subjects: Union[Subject, SubjectGroup]) -> AverageTFRArray:
-        assert isinstance(subjects, Subject) or isinstance(
-            subjects, SubjectGroup
-        ), "Input must be an instance of Subject or SubjectGroup"
         epochs, _, _, stc_epo_array, stc_resting = self._load_complete_data(subjects)
 
         freqs = np.logspace(*np.log10([1, 100]), num=50)
@@ -250,49 +333,73 @@ class SubjectProcessor:
 
         return tfr
 
-    def _plot_tfr(self, tfr: AverageTFRArray, baseline: tuple, title: str):
-        fig, axes = plt.subplots(6, 2, figsize=(12, 16), sharex=False, sharey=True)
+    def _plot_tfr(
+        self,
+        tfr: AverageTFRArray,
+        baseline: tuple,
+        title: str,
+        time_range: tuple = (-0.2, 0.8),
+        vlim: tuple = (None, None),
+        orientation: str = "horizontal",
+    ):
+        if orientation == "vertical":
+            fig, axes = plt.subplots(6, 2, figsize=(12, 16), sharex=False, sharey=True)
+        elif orientation == "horizontal":
+            fig, axes = plt.subplots(2, 6, figsize=(22, 6), sharex=False, sharey=False)
+            
         for i, roi in enumerate(self.roi_acronyms):
-            col = i // 6
-            row = i % 6
+            col = i // 6 if orientation == "vertical" else i % 6
+            row = i % 6 if orientation == "vertical" else i // 6
             ax = axes[row, col]
             tfr.plot(
                 baseline=baseline,
-                tmin=0.0,
-                tmax=1.0,
+                tmin=time_range[0],
+                tmax=time_range[1],
                 picks=roi,
                 mode="zscore",
                 title=title,
                 yscale="linear",
-                colorbar=True,
-                vlim=(-5, 5),
+                colorbar=False,
+                vlim=vlim,
                 cmap="turbo",
                 axes=ax,
                 show=False,
             )
             ax.set_title(roi)
-            if i > 0:
+        
+            im = ax.images[-1]  # The last image plotted on the axes
+    
+            cbar = plt.colorbar(im, ax=ax)
+            cbar.set_ticks([-3, 3])
+            if col > 0:
                 ax.set_ylabel("")
+            if row == 0:
+                ax.set_xlabel("")
+            if i == 0 and orientation == "vertical":
+                ax.set_yticks([0,20,40,60,80,100])
+                ax.set_yticklabels([str(x) for x in [0,20,40,60,80,100]])
+            elif orientation == "horizontal":
+                ax.set_yticks([0,20,40,60,80,100])
+                ax.set_yticklabels([str(x) for x in [0,20,40,60,80,100]])
 
-        # clear_output(wait=True)
+            # add stimulus onset line
+            ax.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
+
         fig.tight_layout()
         plt.show()
+        return fig
 
     def _plot_trace(
         self,
+        subjects: Union[Subject, SubjectGroup],
         epochs,
         evoked_data_arrays,
         sem_epochs_per_sub,
         channel: str,
         time_range: tuple,
     ):
-        # Print the type of evoked_data_arrays
-        print(f"Type of evoked_data_arrays: {type(evoked_data_arrays)}")
-
         evoked_averaged = np.nanmean(evoked_data_arrays, axis=0)
         sem_averaged = np.nanmean(sem_epochs_per_sub, axis=0)
-        print(f"Average trace shape: {evoked_averaged.shape}")
-        print(f"SEM shape: {sem_averaged.shape}")
 
         sfreq = self.sfreq
         total_duration = evoked_averaged.shape[1] / sfreq
@@ -314,12 +421,12 @@ class SubjectProcessor:
             if channel in epochs.info["ch_names"]
             else epochs.info["ch_names"].index(f"{channel.upper()}")
         )
-        
+
         # Get data within the time range
         evoked_averaged = evoked_averaged[channel_index, sample_start:sample_end] * 1e7
         sem_averaged = sem_averaged[channel_index, sample_start:sample_end] * 1e7
-        
-        plt.figure(figsize=(10, 5))
+
+        fig = plt.figure(figsize=(10, 5))
         plt.plot(
             timepoints,
             evoked_averaged,
@@ -332,18 +439,23 @@ class SubjectProcessor:
             evoked_averaged - sem_averaged,
             evoked_averaged + sem_averaged,
             color="b",
-            alpha=0.2,
+            alpha=0.4,
             label="SEM",
         )
 
         plt.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
         plt.xlabel("Time (s)")
         plt.ylabel("Amplitude (µV)")
-        plt.title("Grand Average of Evoked Chronic Pain Response")
+        plt.title(
+            f"Grand Average ERP ({subjects.group})"
+            if isinstance(subjects, Subject)
+            else f"Grand Average ERP (Group-Averaged {subjects.subjects[0].group})"
+        )
         plt.tight_layout()
         plt.legend()
         plt.xlim(time_range)
         plt.show()
+        return fig
 
     def plot_TFR_and_trace(
         self,
@@ -351,11 +463,9 @@ class SubjectProcessor:
         channel="Fp1",
         baseline=(-2.5, 0.0),
         time_range=(-0.2, 0.8),
+        vlim=None,
+        orientation="vertical",
     ):
-        assert isinstance(subjects, Subject) or isinstance(
-            subjects, SubjectGroup
-        ), "Input must be an instance of Subject or SubjectGroup"
-
         tfr = self._compute_tfr(subjects)
 
         epochs, evoked_data_arrays, sem_epochs_per_sub, stc_epo_array, stc_resting = (
@@ -363,15 +473,37 @@ class SubjectProcessor:
         )
 
         title = (
-            "Time-Frequency Representation of Evoked Chronic Pain Response"
+            f"Time-Frequency Representation of Evoked  Response ({subjects.group})"
             if isinstance(subjects, Subject)
-            else "Time-Frequency Representation of Group-Averaged Evoked Chronic Pain Response"
+            else f"Time-Frequency Representation of Group-Averaged Evoked Response ({subjects.subjects[0].group})"
         )
 
-        self._plot_tfr(tfr, baseline, title)
-        self._plot_trace(
-            epochs, evoked_data_arrays, sem_epochs_per_sub, channel, time_range
+        tfr_fig = self._plot_tfr(tfr, baseline, title, time_range, vlim, orientation)
+        save_fig_path = os.path.join(self.stc_path, f"{baseline}")
+        os.makedirs(save_fig_path, exist_ok=True)
+        # if isinstance(subjects, Subject):
+        #     tfr_fig.savefig(os.path.join(save_fig_path, f"{subjects.subject_id}_epochs_tfr.png"),
+        #      dpi=300)))
+        if isinstance(subjects, SubjectGroup):
+            tfr_fig.savefig(os.path.join(save_fig_path, f"{subjects.group}_epochs_tfr.png"),
+                                         dpi=300)
+            
+        trace_fig = self._plot_trace(
+            subjects,
+            epochs,
+            evoked_data_arrays,
+            sem_epochs_per_sub,
+            channel,
+            time_range,
         )
+        # if isinstance(subjects, Subject):
+        #     trace_fig.savefig(os.path.join(save_fig_path, f"{subjects.subject_id}_epochs_trace.png"),
+        #      dpi=300))
+        if isinstance(subjects, SubjectGroup):
+            trace_fig.savefig(os.path.join(save_fig_path, f"{subjects.group}_epochs_trace.png"),
+                              dpi=300)
+        
+        return tfr, evoked_data_arrays
 
     def _get_user_response(self) -> str:
         response = input(
@@ -396,7 +528,7 @@ class SubjectProcessor:
             self.maybe_list.append(subject.subject_id)
             subject.response = "maybe"
 
-        # clear_output(wait=True)
+        clear_output(wait=True)
 
     def display_results(self):
         print("Yes List:", self.yes_list)
