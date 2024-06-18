@@ -4,6 +4,7 @@ import scipy.io as sio
 import numpy as np
 import matplotlib.pyplot as plt
 import mne
+import os
 from mne.time_frequency import tfr_array_morlet, AverageTFRArray
 import seaborn as sns
 from typing import Dict, List, Union
@@ -110,6 +111,7 @@ class SubjectGroup:
             [isinstance(el, Subject) for el in subjects]
         ), "Input must be a list of Subjects"
         self.subjects = subjects
+        self.group = subjects[0].group
 
     def __str__(self):
         return f"Subjects: {self.subjects}"
@@ -338,11 +340,16 @@ class SubjectProcessor:
         title: str,
         time_range: tuple = (-0.2, 0.8),
         vlim: tuple = (None, None),
+        orientation: str = "horizontal",
     ):
-        fig, axes = plt.subplots(6, 2, figsize=(12, 16), sharex=False, sharey=True)
+        if orientation == "vertical":
+            fig, axes = plt.subplots(6, 2, figsize=(12, 16), sharex=False, sharey=True)
+        elif orientation == "horizontal":
+            fig, axes = plt.subplots(2, 6, figsize=(22, 6), sharex=False, sharey=False)
+            
         for i, roi in enumerate(self.roi_acronyms):
-            col = i // 6
-            row = i % 6
+            col = i // 6 if orientation == "vertical" else i % 6
+            row = i % 6 if orientation == "vertical" else i // 6
             ax = axes[row, col]
             tfr.plot(
                 baseline=baseline,
@@ -352,21 +359,35 @@ class SubjectProcessor:
                 mode="zscore",
                 title=title,
                 yscale="linear",
-                colorbar=True,
+                colorbar=False,
                 vlim=vlim,
                 cmap="turbo",
                 axes=ax,
                 show=False,
             )
             ax.set_title(roi)
-            if i > 0:
+        
+            im = ax.images[-1]  # The last image plotted on the axes
+    
+            cbar = plt.colorbar(im, ax=ax)
+            cbar.set_ticks([-3, 3])
+            if col > 0:
                 ax.set_ylabel("")
+            if row == 0:
+                ax.set_xlabel("")
+            if i == 0 and orientation == "vertical":
+                ax.set_yticks([0,20,40,60,80,100])
+                ax.set_yticklabels([str(x) for x in [0,20,40,60,80,100]])
+            elif orientation == "horizontal":
+                ax.set_yticks([0,20,40,60,80,100])
+                ax.set_yticklabels([str(x) for x in [0,20,40,60,80,100]])
 
             # add stimulus onset line
             ax.axvline(x=0, color="red", linestyle="--", label="Stimulus Onset")
 
         fig.tight_layout()
         plt.show()
+        return fig
 
     def _plot_trace(
         self,
@@ -405,7 +426,7 @@ class SubjectProcessor:
         evoked_averaged = evoked_averaged[channel_index, sample_start:sample_end] * 1e7
         sem_averaged = sem_averaged[channel_index, sample_start:sample_end] * 1e7
 
-        plt.figure(figsize=(10, 5))
+        fig = plt.figure(figsize=(10, 5))
         plt.plot(
             timepoints,
             evoked_averaged,
@@ -418,7 +439,7 @@ class SubjectProcessor:
             evoked_averaged - sem_averaged,
             evoked_averaged + sem_averaged,
             color="b",
-            alpha=0.2,
+            alpha=0.4,
             label="SEM",
         )
 
@@ -426,14 +447,15 @@ class SubjectProcessor:
         plt.xlabel("Time (s)")
         plt.ylabel("Amplitude (µV)")
         plt.title(
-            f"Grand Average of Evoked Response ({subjects.group})"
+            f"Grand Average ERP ({subjects.group})"
             if isinstance(subjects, Subject)
-            else f"Grand Average of Group-Averaged Evoked Response ({subjects.subjects[0].group})"
+            else f"Grand Average ERP (Group-Averaged {subjects.subjects[0].group})"
         )
         plt.tight_layout()
         plt.legend()
         plt.xlim(time_range)
         plt.show()
+        return fig
 
     def plot_TFR_and_trace(
         self,
@@ -442,6 +464,7 @@ class SubjectProcessor:
         baseline=(-2.5, 0.0),
         time_range=(-0.2, 0.8),
         vlim=None,
+        orientation="vertical",
     ):
         tfr = self._compute_tfr(subjects)
 
@@ -455,8 +478,17 @@ class SubjectProcessor:
             else f"Time-Frequency Representation of Group-Averaged Evoked Response ({subjects.subjects[0].group})"
         )
 
-        self._plot_tfr(tfr, baseline, title, time_range, vlim)
-        self._plot_trace(
+        tfr_fig = self._plot_tfr(tfr, baseline, title, time_range, vlim, orientation)
+        save_fig_path = os.path.join(self.stc_path, f"{baseline}")
+        os.makedirs(save_fig_path, exist_ok=True)
+        # if isinstance(subjects, Subject):
+        #     tfr_fig.savefig(os.path.join(save_fig_path, f"{subjects.subject_id}_epochs_tfr.png"),
+        #      dpi=300)))
+        if isinstance(subjects, SubjectGroup):
+            tfr_fig.savefig(os.path.join(save_fig_path, f"{subjects.group}_epochs_tfr.png"),
+                                         dpi=300)
+            
+        trace_fig = self._plot_trace(
             subjects,
             epochs,
             evoked_data_arrays,
@@ -464,7 +496,13 @@ class SubjectProcessor:
             channel,
             time_range,
         )
-
+        # if isinstance(subjects, Subject):
+        #     trace_fig.savefig(os.path.join(save_fig_path, f"{subjects.subject_id}_epochs_trace.png"),
+        #      dpi=300))
+        if isinstance(subjects, SubjectGroup):
+            trace_fig.savefig(os.path.join(save_fig_path, f"{subjects.group}_epochs_trace.png"),
+                              dpi=300)
+        
         return tfr, evoked_data_arrays
 
     def _get_user_response(self) -> str:

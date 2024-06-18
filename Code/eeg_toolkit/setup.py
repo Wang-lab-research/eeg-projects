@@ -2,10 +2,10 @@ from setuptools import setup, find_packages
 import numpy as np
 
 setup(
-    name="wanglab_eeg",
+    name="eeg_toolkit",
     description="blank",
     long_description='Wang Lab EEG Python Code'
-                     'GitHub: https://github.com/georgekenefati/wanglab_eeg',
+                     'GitHub: https://github.com/georgekenefati/eeg_toolkit',
     version="0.1",
     python_requires='>=3.6',
 

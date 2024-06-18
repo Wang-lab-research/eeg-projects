@@ -1846,7 +1846,7 @@ def plot_connectivity_and_stats(
                 )
 
                 plt.title(
-                    f"{titles[data_idx]} | {band.capitalize()} Band",
+                    f"{band.capitalize()} Band",
                     fontsize=18,
                     pad=10,
                 )
